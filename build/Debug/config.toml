@@ -1,0 +1,49 @@
+# раздел содержит информацию относительно настроек биржы
+[exchange]
+# имя биржи, записывается в сообщениях, которые отправляет данный шлюз
+    name = "ftx"
+# настройки аккаунта
+[account]
+    api_key = "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ"
+    secret_key = "UjXvP5_76jFvXl_uEhL28G52t9EeL2GwD884uVFV"
+
+# откуда получаем информацию о торгуемых монетах
+[coins]
+# настройки транспортного уровня
+[aeron] 
+# Настройки, относящиеся к отправке данных
+[aeron.publishers]  
+# настройки канала для publishers, рассылающего market data
+#orderbook = ["aeron:udp?control=172.31.22.205:40456|control-mode=dynamic", 1001]
+orderbook = ["aeron:ipc", 100]
+
+# настройки publishers, осуществляющего отправку баланса
+#balance = ["aeron:udp?control=172.31.22.205:40456|control-mode=dynamic", 1002]
+balance = ["aeron:ipc", 101]
+
+# настройки publishers, осуществляющего отправку логов
+logs = ["aeron:udp?endpoint=3.66.183.27:4444", 1001]
+
+# Настройки, относящиеся к приёму данных
+[aeron.subscribers]
+# канал, в котором приходят команды от ядра
+#core = ["aeron:udp?endpoint=172.31.22.205:40457|control=172.31.22.205:",1003]
+core = ["aeron:ipc", 103]
+
+#    [aeron.balance]
+#	channel = "aeron:udp?control=192.168.0.115:40456"
+#	stream_id = 101
+#	buffer_size = 1400
+#   [aeron.ticker]
+#	channel = "aeron:udp?control=192.168.0.115:40456"
+#	stream_id = 100
+#        buffer_size = 1400
+#    [aeron.log]
+#	channel = "aeron:udp?endpoint=3.66.183.27:4444"
+#	stream_id = 1001
+#        buffer_size = 1400
+#    [aeron.core]
+#	channel = "aeron:ipc"
+#	stream_id = 103
+#        buffer_size = 1400
+
