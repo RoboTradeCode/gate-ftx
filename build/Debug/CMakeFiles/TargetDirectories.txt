@@ -1,3 +1,0 @@
-/home/kirill/CMakeProjects/ftxGateway/build/Debug/CMakeFiles/rebuild_cache.dir
-/home/kirill/CMakeProjects/ftxGateway/build/Debug/CMakeFiles/edit_cache.dir
-/home/kirill/CMakeProjects/ftxGateway/build/Debug/CMakeFiles/ftxGateway.dir
