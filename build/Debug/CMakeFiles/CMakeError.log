@@ -1,11 +1,11 @@
 Performing C++ SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
 Change Dir: /home/kirill/CMakeProjects/ftxGateway/build/Debug/CMakeFiles/CMakeTmp
 
-Run Build Command(s):/opt/Qt/Tools/Ninja/ninja cmTC_c4276 && [1/2] Building CXX object CMakeFiles/cmTC_c4276.dir/src.cxx.o
-[2/2] Linking CXX executable cmTC_c4276
-FAILED: cmTC_c4276 
-: && /usr/bin/g++   CMakeFiles/cmTC_c4276.dir/src.cxx.o -o cmTC_c4276   && :
-/usr/bin/ld: CMakeFiles/cmTC_c4276.dir/src.cxx.o: в функции «main»:
+Run Build Command(s):/opt/Qt/Tools/Ninja/ninja cmTC_dc1ac && [1/2] Building CXX object CMakeFiles/cmTC_dc1ac.dir/src.cxx.o
+[2/2] Linking CXX executable cmTC_dc1ac
+FAILED: cmTC_dc1ac 
+: && /usr/bin/g++   CMakeFiles/cmTC_dc1ac.dir/src.cxx.o -o cmTC_dc1ac   && :
+/usr/bin/ld: CMakeFiles/cmTC_dc1ac.dir/src.cxx.o: в функции «main»:
 src.cxx:(.text+0x2f): неопределённая ссылка на «pthread_create»
 /usr/bin/ld: src.cxx:(.text+0x3b): неопределённая ссылка на «pthread_detach»
 /usr/bin/ld: src.cxx:(.text+0x47): неопределённая ссылка на «pthread_cancel»
@@ -38,10 +38,10 @@ int main(void)
 Determining if the function pthread_create exists in the pthreads failed with the following output:
 Change Dir: /home/kirill/CMakeProjects/ftxGateway/build/Debug/CMakeFiles/CMakeTmp
 
-Run Build Command(s):/opt/Qt/Tools/Ninja/ninja cmTC_cc2b4 && [1/2] Building CXX object CMakeFiles/cmTC_cc2b4.dir/CheckFunctionExists.cxx.o
-[2/2] Linking CXX executable cmTC_cc2b4
-FAILED: cmTC_cc2b4 
-: && /usr/bin/g++ -DCHECK_FUNCTION_EXISTS=pthread_create  CMakeFiles/cmTC_cc2b4.dir/CheckFunctionExists.cxx.o -o cmTC_cc2b4  -lpthreads && :
+Run Build Command(s):/opt/Qt/Tools/Ninja/ninja cmTC_3e923 && [1/2] Building CXX object CMakeFiles/cmTC_3e923.dir/CheckFunctionExists.cxx.o
+[2/2] Linking CXX executable cmTC_3e923
+FAILED: cmTC_3e923 
+: && /usr/bin/g++ -DCHECK_FUNCTION_EXISTS=pthread_create  CMakeFiles/cmTC_3e923.dir/CheckFunctionExists.cxx.o -o cmTC_3e923  -lpthreads && :
 /usr/bin/ld: невозможно найти -lpthreads
 collect2: error: ld returned 1 exit status
 ninja: build stopped: subcommand failed.

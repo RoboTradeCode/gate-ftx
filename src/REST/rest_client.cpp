@@ -177,7 +177,7 @@ namespace ftx {
         return json_loh::parse(response.body());
     }*/
     /*json_loh*/
-    std::string RESTClient::place_order(const std::string market, const std::string side, const std::string price, const std::string size, bss::error& error_, bool ioc, bool post_only, bool reduce_only)
+    std::string RESTClient::place_order(const std::string market, const std::string side, const double price, const double size, bss::error& error_, bool ioc, bool post_only, bool reduce_only)
     {
         json_loh payload = {{"market", market},
                     {"side", side},
@@ -323,6 +323,7 @@ namespace ftx {
             /*auto*/ response = http_client.get("wallet/balances");
             //try
             //{
+                //std::cout<<response.body().c_str()<<std::endl;
                 simdjson::dom::parser parser;
                 auto &&error_code = parser.allocate(0x1000,0x04);
                 if(simdjson::SUCCESS == error_code)

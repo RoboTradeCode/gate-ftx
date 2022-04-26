@@ -1,0 +1,162 @@
+{
+  "is_new": true,
+  "data": {
+    "markets": [
+      {
+        "exchange_symbol": "ETH-BTC",
+        "price_increment": 0.25,
+        "amount_increment": 0.0001,
+        "common_symbol": "ETH/BTC",
+        "assets": {
+          "base": "ETH",
+          "quote": "BTC"
+        }
+      },
+      {
+        "exchange_symbol": "fBTCUST",
+        "price_increment": 0.25,
+        "amount_increment": 0.0001,
+        "common_symbol": "BTC/USDT",
+        "assets": {
+          "base": "BTC",
+          "quote": "UST"
+        }
+      }
+    ],
+    "assets_labels": [
+      {
+        "exchange": "UST",
+        "common": "USDT"
+      },
+      {
+        "exchange": "BTC",
+        "common": "BTC"
+      }
+    ],
+    "routes": [
+      [
+        {
+          "source_asset": "ETH",
+          "common_symbol": "ETH/USDT",
+          "operation": "sell"
+        },
+        {
+          "source_asset": "USDT",
+          "common_symbol": "BTC/USDT",
+          "operation": "buy"
+        },
+        {
+          "source_asset": "BTC",
+          "common_symbol": "ETH/BTC",
+          "operation": "buy"
+        }
+      ],
+      [
+        {
+          "source_asset": "USDT",
+          "common_symbol": "ETH/USDT",
+          "operation": "buy"
+        },
+        {
+          "source_asset": "ETH",
+          "common_symbol": "ETH/BTC",
+          "operation": "sell"
+        },
+        {
+          "source_asset": "BTC",
+          "common_symbol": "BTC/USDT",
+          "operation": "sell"
+        }
+      ],
+      [
+        {
+          "source_asset": "BTC",
+          "common_symbol": "BTC/USDT",
+          "operation": "sell"
+        },
+        {
+          "source_asset": "USDT",
+          "common_symbol": "ETH/USDT",
+          "operation": "buy"
+        },
+        {
+          "source_asset": "ETH",
+          "common_symbol": "ETH/BTC",
+          "operation": "sell"
+        }
+      ]
+    ],
+    "gate_config": {
+      "exchange": {
+        "name": "ftx",
+        "instance": 1
+      },
+      "account": {
+        "api_key": "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ",
+        "secret_key": "UjXvP5_76jFvXl_uEhL28G52t9EeL2GwD884uVFV"
+      },
+      "aeron": {
+        "publishers": {
+          "orderbook": {
+            "channel": "aeron:ipc",
+            "stream_id": 1001
+          },
+          "balance": {
+            "channel": "aeron:ipc",
+            "stream_id": 1002
+          },
+          "log": {
+            "channel": "aeron:ipc",
+            "stream_id": 3333
+          },
+	  "order_status": {
+	    "channel": "aeron:ipc",
+	    "stream_id": 1003
+	  }
+        },
+        "subscribers": {
+          "core": {
+            "channel": "aeron:ipc",
+            "stream_id": 1005
+          }
+        }
+      }
+    },
+    "core_config": {
+      "aeron": {
+        "publishers": {
+          "gateway": {
+            "channel": "aeron:udp?control=172.31.14.205:40456|control-mode=dynamic",
+            "stream_id": 1003
+          },
+          "metrics": {
+            "channel": "aeron:udp?endpoint=3.66.183.27:44444",
+            "stream_id": 1001
+          },
+          "log": {
+            "channel": "aeron:udp?control=172.31.14.205:40456|control-mode=dynamic",
+            "stream_id": 1005
+          }
+        },
+        "subscribers": {
+          "balance": {
+            "channel": "aeron:udp?control-mode=manual",
+            "destinations": [
+              "aeron:udp?endpoint=172.31.14.205:40461|control=172.31.14.205:40456"
+            ],
+            "stream_id": 1002
+          },
+          "orderbooks": {
+            "channel": "aeron:udp?control-mode=manual",
+            "destinations": [
+              "aeron:udp?endpoint=172.31.14.205:40458|control=172.31.14.205:40456",
+              "aeron:udp?endpoint=172.31.14.205:40459|control=18.159.92.185:40456",
+              "aeron:udp?endpoint=172.31.14.205:40460|control=54.248.171.18:40456"
+            ],
+            "stream_id": 1001
+          }
+        }
+      }
+    }
+  }
+}

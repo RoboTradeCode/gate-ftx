@@ -13,6 +13,7 @@
 //#include <logging.h>
 
 using json_loh = nlohmann::json;
+using JSON     = nlohmann::ordered_json;
 //using fast_json = simdjson::simdjson_result<dom::element>;
 namespace net = boost::asio;
 namespace ftx {

@@ -91,5 +91,6 @@ namespace ftx {
             error += ex.what();
             return 0;
         }
+        return 0;
     }
 }

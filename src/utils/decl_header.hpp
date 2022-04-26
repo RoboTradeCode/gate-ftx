@@ -2,7 +2,9 @@
 #define DECL_HEADER_H
 
 #include <string>
-#include <fmt/format.h>
+//#include <fmt/format.h>
+#include "../spdlog/spdlog.h"
+
 
 using namespace std;
 // описывает состояние баланса

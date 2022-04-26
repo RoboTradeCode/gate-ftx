@@ -6,21 +6,22 @@
 #include <vector>
 #include "../toml++/toml.h"
 
-extern const char* DEFAULT_EXCHANGE_NAME;
+/*extern const char* DEFAULT_EXCHANGE_NAME;
 extern const char* DEFAULT_SUBSCRIBER_CHANNEL;
 extern const char* DEFAULT_PUBLISHER_CHANNEL;
 extern const int DEFAULT_CORE_STREAM_ID;
 extern const int DEFAULT_BALANCE_STREAM_ID;
 extern const int DEFAULT_TICKER_STREAM_ID;
 extern const int DEFAULT_LOG_STREAM_ID;
-extern const int DEFAULT_BUFFER_SIZE;
+extern const int DEFAULT_BUFFER_SIZE;*/
 
 // Структура конфигурации ядра
-struct core_config
+struct gate_config
 {
     struct exchange
     {
         std::string name;
+        int         instance;
     } exchange;
     struct account
     {
@@ -28,7 +29,7 @@ struct core_config
         std::string secret_key;
     }account;
 
-    struct aeron
+    struct aeron_core
     {
         struct {
             struct balance{
@@ -43,6 +44,10 @@ struct core_config
                 std::string channel;
                 int stream_id;
             } logs;
+            struct order_status{
+                std::string channel;
+                int stream_id;
+            }order_status;
         }publishers;
         struct {
             struct core{
@@ -50,7 +55,27 @@ struct core_config
                 int stream_id;
             } core;
         }subscribers;
-    } aeron;
+    } aeron_core;
+
+    struct aeron_agent{
+        struct {
+            struct {
+                std::string channel;
+                int stream_id;
+            } agent;
+            struct {
+                std::string channel;
+                int stream_id;
+            } logs;
+        } publishers;
+        struct {
+            struct {
+                std::string channel;
+                int stream_id;
+            } agent;
+        } subscribers;
+    } aeron_agent;
+
 };
 
 /**
@@ -59,7 +84,7 @@ struct core_config
  * @param file_path Путь к файлу конфигурации в формате TOML
  * @return Конфигурация ядра
  */
-core_config parse_config(const std::string&);
+gate_config parse_config(const std::string&);
 
 
 #endif  // GATEWAY_CONFIG_H

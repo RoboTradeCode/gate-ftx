@@ -5,7 +5,10 @@ project(ftxGateway LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(LIB_AERON /home/kirill/aeron)
+#set(LIB_AERON /home/kirill/aeron)
+set(LIB_AERON $ENV{HOME}/aeron)
+
+set(SPDLOG_DIR ${CMAKE_SOURCE_DIR})
 
 find_package(Boost 1.78.0 REQUIRED COMPONENTS log_setup log json)
 find_package(Threads REQUIRED)
@@ -15,6 +18,8 @@ find_package(fmt)
 include_directories(${LIB_AERON}/aeron-client/src/main/cpp)
 # for fmt library
 include_directories(/usr/local/include)
+# for spdlog
+include_directories(${SPDLOG_DIR}/src)
 
 
 add_executable(
@@ -42,6 +47,8 @@ add_executable(
     src/utils/decl_header.hpp
     src/utils/Time.hpp
     src/utils/error.hpp
+    src/utils/mylogger.cpp
+    src/utils/mylogger.hpp
     src/REST/rest_client.cpp
     src/REST/rest_client.hpp
     src/REST/async_rest_client.cpp
@@ -50,6 +57,7 @@ add_executable(
     src/WS/WS.hpp
     src/WS/ws_client.cpp
     src/WS/ws_client.hpp
+    src/spdlog/spdlog.h
     )
 target_link_libraries(
     ftxGateway

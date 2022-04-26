@@ -35,8 +35,10 @@ class RESTClient
 
     std::string place_order(const std::string market,
                             const std::string side,
-                            const std::string price,
-                            const std::string size,
+                            //const std::string price,
+                            const double price_,
+                            //const std::string size,
+                            const double size_,
                             bss::error& error_,
                             bool ioc = false,
                             bool post_only = false,
