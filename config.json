@@ -13,7 +13,7 @@
         }
       },
       {
-        "exchange_symbol": "fBTCUST",
+        "exchange_symbol": "BTCUST",
         "price_increment": 0.25,
         "amount_increment": 0.0001,
         "common_symbol": "BTC/USDT",
@@ -21,7 +21,18 @@
           "base": "BTC",
           "quote": "UST"
         }
+      },
+      {
+        "exchange_symbol": "ETHUST",
+        "price_increment": 0.25,
+        "amount_increment": 0.0001,
+        "common_symbol": "ETH/USDT",
+        "assets": {
+          "base": "ETH",
+          "quote": "UST"
+        }
       }
+
     ],
     "assets_labels": [
       {
@@ -89,7 +100,8 @@
     "gate_config": {
       "exchange": {
         "name": "ftx",
-        "instance": 1
+        "instance": 1,
+	"depth": 100
       },
       "account": {
         "api_key": "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ",
@@ -98,19 +110,19 @@
       "aeron": {
         "publishers": {
           "orderbook": {
-            "channel": "aeron:ipc",
+            "channel": "aeron:ipc?term-length=64m",
             "stream_id": 1001
           },
           "balance": {
-            "channel": "aeron:ipc",
+            "channel": "aeron:ipc?term-length=64m",
             "stream_id": 1002
           },
           "log": {
-            "channel": "aeron:ipc",
-            "stream_id": 3333
+            "channel": "aeron:udp?endpoint=3.66.183.27:44444",
+            "stream_id": 1001
           },
 	  "order_status": {
-	    "channel": "aeron:ipc",
+	    "channel": "aeron:ipc?term-length=64m",
 	    "stream_id": 1003
 	  }
         },

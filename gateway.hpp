@@ -34,9 +34,11 @@ class gateway : public std::enable_shared_from_this<gateway>
     // каналы AERON для ядра
     std::shared_ptr<Publisher>      _orderbook_channel;
     std::shared_ptr<Publisher>      _balance_channel;
-    std::shared_ptr<Publisher>      _log_channel;
     std::shared_ptr<Publisher>      _order_status_channel;
     std::shared_ptr<Subscriber>     _core_channel;
+
+    // канал AERON для лог сервера
+    std::shared_ptr<Publisher>      _log_channel;
 
     // каналы FTX
     std::shared_ptr<ftx::WSClient>   _ftx_ws_public;
@@ -93,14 +95,16 @@ class gateway : public std::enable_shared_from_this<gateway>
     void        place_order_result_handler(std::string_view message_);
     // обрабатывает ордер на покупку
     //void        buy_order(std::string_view price_, std::string_view quantity_);
-    void        buy_order(const double& price, const double& quantity);
+    void        buy_order(const std::string& symbol, const double& price, const double& quantity);
     // обрабатывает отмену ордера на покупку
-    void        cancel_buy_order();
+    void        cancel_buy_order(const int64_t& order_id);
     // обрабатывает ордер на продажу
     //void        sell_order(std::string_view price_, std::string_view quantity_);
-    void        sell_order(const double& price_, const double& quantity_);
+    void        sell_order(const std::string& symbol, const double& price_, const double& quantity_);
     // обрабатывает отмену ордера на продажу
-    void        cancel_sell_order();
+    void        cancel_sell_order(const int64_t& order_id);
+    // обрабатывает отмену ордера по order_id
+    void        cancel_order(const int64_t& order_id);
     // отправляем ошибки
     void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера

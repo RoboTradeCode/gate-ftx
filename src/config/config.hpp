@@ -18,11 +18,18 @@ extern const int DEFAULT_BUFFER_SIZE;*/
 // Структура конфигурации ядра
 struct gate_config
 {
+    // список рынков
+    std::vector<std::string> _markets;
+    // биржа
     struct exchange
     {
+        // имя биржы
         std::string name;
         int         instance;
+        // глубина стакана
+        int orderbook_depth;
     } exchange;
+    // ключи
     struct account
     {
         std::string api_key;

@@ -157,29 +157,53 @@ void gateway::load_config(bss::error& error_) noexcept
                     // скорее всего дальше незачем парсить
                     return ;
                 }
+                // получим рынки, с которыми предстоит работать
+                if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
+                    for (auto market : markets_array) {
+                        if (auto common_symbol_element{market["common_symbol"].get_c_str()}; simdjson::SUCCESS == common_symbol_element.error()) {
+                            //std::cout << common_symbol_element.value() << std::endl;
+                            //std::string_view mrk = common_symbol_element.value();
+                            _work_config._markets.push_back(common_symbol_element.value());
+                        } else {
+                            error_.describe("При загрузке конфигурации в теле json не найден объект \"common_symbol\".");
+                        }
+                    }
+                } else {
+                    error_.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
+                }
                 // получим часть пути для сокращения полного пути до элементов
                 if (auto cfg = result["data"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
-                    // получаем все необходимые элементы
+                    // получаем имя биржи
                     if (auto name_element{cfg["exchange"]["name"].get_string()}; simdjson::SUCCESS == name_element.error()){
                         _work_config.exchange.name = name_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                     }
+                    // получаем instance
                     if (auto instance_element{cfg["exchange"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
                         _work_config.exchange.instance = instance_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
                     }
+                    // получаем глубину стакана
+                    if (auto orderbook_depth_element{cfg["exchange"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
+                        _work_config.exchange.orderbook_depth = orderbook_depth_element.value();
+                    } else {
+                        error_.describe("При загрузке конфигурации в теле json не найден оъект \"depth\".");
+                    }
+                    // получаем ключ
                     if (auto api_key_element{cfg["account"]["api_key"].get_string()}; simdjson::SUCCESS == api_key_element.error()) {
                         _work_config.account.api_key = api_key_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"api_key\".");
                     }
+                    // получаем ключ
                     if (auto secret_key_element{cfg["account"]["secret_key"].get_string()}; simdjson::SUCCESS == secret_key_element.error()) {
                         _work_config.account.secret_key = secret_key_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                     }
+                    // получаем данные для канала оредбуков
                     if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbook"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                         _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
                     } else {
@@ -190,6 +214,7 @@ void gateway::load_config(bss::error& error_) noexcept
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook stream_id\".");
                     }
+                    // получаем данные для канала балансов
                     if (auto balance_channel_element{cfg["aeron"]["publishers"]["balance"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
                         _work_config.aeron_core.publishers.balance.channel = balance_channel_element.value();
                     } else {
@@ -200,6 +225,7 @@ void gateway::load_config(bss::error& error_) noexcept
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"balance stream_id\".");
                     }
+                    // получаем данные для канала логов
                     if (auto log_channel_element{cfg["aeron"]["publishers"]["log"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
                         _work_config.aeron_core.publishers.logs.channel = log_channel_element.value();
                     } else {
@@ -278,8 +304,12 @@ void gateway::create_public_ws()
     //ftx_ws_public->subscribe_ticker("BTC/USDT");
     //ftx_ws_public->subscribe_ticker("ETH/USDT");
     // подписываемся на канал ордербуков
-    _ftx_ws_public->subscribe_orderbook("BTC/USDT");
+    //_ftx_ws_public->subscribe_orderbook("BTC/USDT");
     //ftx_ws_public->subscribe_orderbook("ETH/USDT");
+    // подписываемся на канал ордербуков
+    for (auto market : _work_config._markets) {
+        _ftx_ws_public->subscribe_orderbook(market);
+    }
 }
 //---------------------------------------------------------------
 // создаёт приватный WS
@@ -491,6 +521,8 @@ void gateway::aeron_handler(std::string_view message_)
                             if (exchange_element.value() == "ftx") {
                                 std::string_view action;
                                 std::string_view side;
+                                std::string symbol;
+                                int64_t order_id;
                                 double price;
                                 double amount;
                                 if (auto action_element{parse_result["action"].get_string()}; simdjson::SUCCESS == action_element.error()) {
@@ -499,6 +531,10 @@ void gateway::aeron_handler(std::string_view message_)
                                 if (auto data_element_array{parse_result["data"].get_array()}; simdjson::SUCCESS == data_element_array.error())
                                 {
                                     for (auto data_element : data_element_array) {
+                                        // получаем рынок
+                                        if (auto symbol_element{data_element["symbol"]}; simdjson::SUCCESS == symbol_element.error()) {
+                                            symbol = symbol_element.value();
+                                        } else {}
                                         // получаем вид сделки
                                         if (auto side_element{data_element["side"].get_string()}; simdjson::SUCCESS == side_element.error()) {
                                             side = side_element.value();
@@ -509,58 +545,68 @@ void gateway::aeron_handler(std::string_view message_)
                                         if (auto amount_element{data_element["amount"].get_double()}; simdjson::SUCCESS == amount_element.error()) {
                                             amount = amount_element.value();
                                         } else {}
+                                        if (auto order_id_element{data_element["id"].get_int64()}; simdjson::SUCCESS == order_id_element.error()) {
+                                            order_id = order_id_element.value();
+                                        }
                                         // выставлен ордер на отмену продажи
-                                        if (action.compare("cancel_order") == 0 && side.compare("sell") == 0) {
-                                            cancel_sell_order();
+                                        if (action.compare("cancel_order") == 0 /*&& side.compare("sell") == 0*/) {
+                                            //cancel_sell_order(order_id);
+                                            cancel_order(order_id);
                                          }
                                         // выставлен ордер на продажу
                                         else if (action.compare("create_order") == 0 && side.compare("sell") == 0) {
-                                            sell_order(price, amount);
+                                            sell_order(symbol, price, amount);
                                         }
                                         // выставлен ордер на отмену покупки
-                                        else if (action.compare("cancel_order") == 0 && side.compare("buy") == 0) {
-                                            cancel_buy_order();
-                                        }
+                                        /*else if (action.compare("cancel_order") == 0 && side.compare("buy") == 0) {
+                                            cancel_buy_order(order_id);
+                                        }*/
                                         // выставлен ордер на покупку
                                         else if (action.compare("create_order") == 0 && side.compare("buy") == 0) {
-                                            buy_order(price, amount);
+                                            buy_order(symbol, price, amount);
                                         } else {
-                                            _error.describe("Не могу распознать action и side в команде.");
+                                            //_error.describe("Не могу распознать action и side в команде от ядра {}.", message_);
+                                            _general_logger->error("Не могу распознать action и side в команде от ядра {}.", message_.data());
                                         }
                                     }
                                 } else {
-                                    _error.describe(fmt::format("Не могу получить массив данных data {}.", message_.data()));
+                                    //_error.describe(fmt::format("Не могу получить массив данных data {}.", message_.data()));
+                                    _general_logger->error("Не могу получить массив данных data {}.", message_.data());
                                 }
                             } else {
-                                _error.describe(fmt::format("В команде неверно указана биржа: {}.", message_.data()));
+                                //_error.describe(fmt::format("В команде неверно указана биржа: {}.", message_.data()));
+                                _general_logger->error("В команде неверно указана биржа: {}.", message_.data());
                             }
                         } else {
 
                         }
                     } else {
-                          _error.describe(fmt::format("В команде неверно указан event: {}.", message_.data()));
+                          //_error.describe(fmt::format("В команде неверно указан event: {}.", message_.data()));
+                        _general_logger->error("В команде неверно указан event: {}.", message_.data());
                     }
                 }
             }
             else
             {
-                _error.describe("Ошибка разбора json фрейма.");
-                _general_logger->error(_error.to_string());
-                _error.clear();
+                //_error.describe("Ошибка разбора json фрейма.");
+                //_general_logger->error(_error.to_string());
+                //_error.clear();
+                _general_logger->error("Ошибка разбора json фрейма при получении команды от ядра: {}.", message_.data());
             }
         }
         else
         {
-            _error.describe("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)).");
-            _general_logger->error(_error.to_string());
-            _error.clear();
+            //_error.describe("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)).");
+            _general_logger->error("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)).");
+            //_error.clear();
         }
     }
     catch(simdjson::simdjson_error& err)
     {
-        _error.describe(err.what() + fmt::format(" (json body: {}).", message_));
-        _general_logger->error(_error.to_string());
-        _error.clear();
+        //_error.describe(err.what() + fmt::format(" (json body: {}).", message_));
+        std::string error_description = err.what() + fmt::format(" (json body: {}).", message_);
+        _general_logger->error(error_description);
+        //_error.clear();
     }
     //std::cout << "------------------------------------------------------------------------------------------------" << std::endl;
     std::cout << "" << std::endl;
@@ -637,7 +683,7 @@ void gateway::aeron_handler(std::string_view message_)
 //---------------------------------------------------------------
 // обрабатывает отмену ордера на продажу ("-" && "sell")
 //---------------------------------------------------------------
-void gateway::cancel_sell_order()
+void gateway::cancel_sell_order(const int64_t& order_id)
 {
     _general_logger->info("Ядром выставлен ордер на отмену продажи, проверим открытые ордера.");
     // получаем открытые ордера
@@ -682,7 +728,7 @@ void gateway::cancel_sell_order()
 //---------------------------------------------------------------
 // обрабатывает отмену ордера на покупку ("-" && "buy")
 //---------------------------------------------------------------
-void gateway::cancel_buy_order()
+void gateway::cancel_buy_order(const int64_t& order_id)
 {
     _general_logger->info("Ядром выставлен ордер на отмену покупки, проверим открытые ордера.");
     // получаем открытые ордера
@@ -725,10 +771,28 @@ void gateway::cancel_buy_order()
     }
 }
 //---------------------------------------------------------------
+// обрабатывает отмену ордера по id
+//---------------------------------------------------------------
+void gateway::cancel_order(const int64_t &order_id)
+{
+    _general_logger->info("Ядром выставлен ордер на отмену: order_id = {}.", order_id);
+    _error.clear();
+    std::string cancel_order_result = _ftx_rest_private->cancel_order(std::to_string(order_id), _error);
+    if(_error) {
+        _error.describe("Ошибка отмены ордера");
+        _general_logger->error("Результат отмены ордера (id): {} {} {}", order_id, cancel_order_result, _error.to_string());
+        order_status_prepare("order_cancel", "Order was cancel", cancel_order_result, true, _error.to_string());
+        _error.clear();
+    } else {
+        _general_logger->info("Результат отмены ордера (id): {} {}", order_id, cancel_order_result);
+        order_status_prepare("order_cancel", "Order was cancel", cancel_order_result);
+    }
+}
+//---------------------------------------------------------------
 // обрабатывает ордер на продажу ("+" && "sell")
 //---------------------------------------------------------------
 //void gateway::sell_order(std::string_view price_, std::string_view quantity_)
-void gateway::sell_order(const double& price_, const double& quantity_)
+void gateway::sell_order(const std::string& symbol, const double& price_, const double& quantity_)
 {
     _general_logger->info("Ядром выставлен ордер на продажу, проверим открытые ордера.");
     _error.clear();
@@ -773,7 +837,7 @@ void gateway::sell_order(const double& price_, const double& quantity_)
     _general_logger->info("После корректировки: {} {}", price, size);*/
 
     // выставляем ордер (синхронно)
-    std::string place_order_result = _ftx_rest_private->place_order("BTC/USDT", "sell", price_, quantity_, _error);
+    std::string place_order_result = _ftx_rest_private->place_order(symbol, "sell", price_, quantity_, _error);
     if(_error) {
         _error.describe("Ошибка выставления ордера.");
         _general_logger->error("Ошибка выставления ордера на продажу: {} {}", place_order_result, _error.to_string());
@@ -794,7 +858,7 @@ void gateway::sell_order(const double& price_, const double& quantity_)
 // обрабатывает ордер на покупку ("+" && "buy")
 //---------------------------------------------------------------
 //void gateway::buy_order(std::string_view price_, std::string_view quantity_)
-void gateway::buy_order(const double& price_, const double& quantity_)
+void gateway::buy_order(const std::string& symbol, const double& price_, const double& quantity_)
 {
     _general_logger->info("Ядром выставлен ордер на покупку, проверим открытые ордера.");
     // получаем открытые ордера
@@ -840,7 +904,7 @@ void gateway::buy_order(const double& price_, const double& quantity_)
     _general_logger->info("После корректировки: {} {}", price, size);*/
 
     // выставляем ордер (синхронно)
-    std::string place_order_result = _ftx_rest_private->place_order("BTC/USDT", "buy", price_, quantity_, _error);
+    std::string place_order_result = _ftx_rest_private->place_order(symbol, "buy", price_, quantity_, _error);
     if(_error) {
         _general_logger->error("Ошибка выставления ордера на покупку: {} {}", place_order_result, _error.to_string());
         order_status_prepare("order_created", "Order was created", place_order_result, true, _error.to_string());
@@ -955,10 +1019,16 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
 void gateway::order_status_sender(std::string_view order_status_)
 {
 
-    const std::int64_t result = _order_status_channel->offer(order_status_.data());
+    std::int64_t result = _order_status_channel->offer(order_status_.data());
     if(result < 0)
     {
         processing_error("error: Ошибка отправки информации о статусе ордера в ядро: ", result);
+    }
+    // теперь отравим все это дело в лог
+    result = _log_channel->offer(order_status_.data());
+    if(result < 0)
+    {
+        processing_error("error: Ошибка отправки информации о статусе ордера в лог: ", result);
     }
 }
 //---------------------------------------------------------------
@@ -1424,94 +1494,13 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
 //---------------------------------------------------------------
 void gateway::orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_)
 {
-    // это надо брать из конфига
-    const int sended_size = 34;
+    // это надо брать из конфига _work_config.exchange.orderbook_depth
+    const int sended_size = _work_config.exchange.orderbook_depth;
     map<string, map<string, map<double, double>, std::greater<string>>>::const_iterator market_itr;
     map<string, map<double, double>>::const_iterator direct_itr;
     map<double, double>::const_iterator ptr;
     map<double, double>::const_reverse_iterator rptr;
 
-    //std::cout << "---------------------------------------------------------------------" << std::endl;
-//    uint64_t start1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-//    // проходим сначала по рынкам
-//    for (market_itr = markets_map_.begin(); market_itr != markets_map_.end(); market_itr++) {
-//        pt::ptree orderbook_root;
-//        orderbook_root.put("event",     "data");
-//        orderbook_root.put("exchange",  "ftx");
-//        orderbook_root.put("node",      "gate");
-//        orderbook_root.put("instance",  1);
-//        orderbook_root.put("action",    "orderbook");
-//        orderbook_root.put("message",   NULL);
-//        orderbook_root.put("algo",      "signal");
-//        orderbook_root.put("timestamp", std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-//        pt::ptree data;
-//        // теперь проходим по bids и asks в текущем рынке
-//        for (direct_itr = market_itr->second.begin(); direct_itr != market_itr->second.end(); direct_itr++) {
-//            /* обработка массивов ask и bid будет отличаться, так как порядок сортировки в map одинаковый (по возрастанию), а
-//             * в реальности для bid нужна сортировка в другом порядке.
-//             *      Поэтому для ask (продать надо как можно дороже):
-//             * если надо отправлять N значений, то в ask смещаем указатель так, чтобы осталось последних N и формируем json из них.
-//             *      Для bid (купить надо как можно дешевле):
-//             * есди надо отправить N значений, то в bid берем первые N и формируем из них json, только в обратном порядке
-//             */
-//            if (direct_itr->first.compare("asks") == 0) {
-//                // получаем итератор на начало map
-//                auto begin_map = direct_itr->second.begin();
-//                // вычисляем на сколько можем сместиться
-//                auto remain_count = ((direct_itr->second.size() < sended_size) ? direct_itr->second.size() : sended_size);
-//                // смещаемся на N
-//                std::advance(begin_map, direct_itr->second.size() - remain_count);
-//                //std::cout << " смещаемся на " << direct_itr->second.size() - remain_count << std::endl;
-
-//                pt::ptree asks_node;
-//                for (ptr = begin_map; ptr != direct_itr->second.end(); ptr++) {
-//                    pt::ptree cell;
-//                    pt::ptree price;
-//                    price.put_value<double>(ptr->first);
-//                    cell.push_back(std::make_pair("", price));
-
-//                    pt::ptree size;
-//                    size.put_value<double>(ptr->second);
-//                    cell.push_back(std::make_pair("", size));
-
-//                    asks_node.push_back(std::make_pair("", cell));
-//                }
-//                data.add_child(direct_itr->first, asks_node);
-//            }
-//            else {
-//                // получаем обратный итератор на начало map
-//                auto rbegin_map = direct_itr->second.rbegin();
-//                // вычисляем сможем ли сдвинуть на N элементов
-//                auto remain_count = ((direct_itr->second.size() < sended_size) ? direct_itr->second.size() : sended_size);
-//                // смещаемся на  (map.size - N)
-//                std::advance(rbegin_map, (direct_itr->second.size() - remain_count));
-//                pt::ptree bids_node;
-//                for (rptr = rbegin_map; rptr != direct_itr->second.rend(); rptr++) {
-//                    pt::ptree cell;
-//                    pt::ptree price;
-//                    price.put_value<double>(rptr->first);
-//                    cell.push_back(std::make_pair("", price));
-
-//                    pt::ptree size;
-//                    size.put_value<double>(rptr->second);
-//                    cell.push_back(std::make_pair("", size));
-
-//                    bids_node.push_back(std::make_pair("", cell));
-//                }
-//                data.add_child(direct_itr->first, bids_node);
-//            }
-
-//        }
-//        data.put("symbol", market_itr->first);
-//        data.put("timestamp", 1499280391811876);
-//        orderbook_root.add_child("data", data);
-//        std::stringstream json_for_core;
-//        pt::write_json(json_for_core, orderbook_root, false);
-//        orderbook_sender(json_for_core.str());
-//    }
-//    uint64_t stop1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-//    std::cout << stop1-start1 << std::endl;
-    //--------------------------------------------------------
     uint64_t start2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     for (market_itr = markets_map_.begin(); market_itr != markets_map_.end(); ++market_itr) {
         JSON orderbook_root;
@@ -1563,8 +1552,6 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 
         orderbook_sender(orderbook_root.dump());
     }
-//    uint64_t stop2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-//    std::cout << stop2-start2 << std::endl;
 }
 //---------------------------------------------------------------
 // отправляет ордербук
