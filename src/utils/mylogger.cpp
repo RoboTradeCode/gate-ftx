@@ -17,10 +17,10 @@ void init_logger()
         max_files
     );
 
-    // Логирование баланса и ошибок
-    auto balance = spdlog::rotating_logger_mt<spdlog::async_factory>(
-        "balance",
-        "logs/balance.log",
+    // Логирование баланса
+    auto balances = spdlog::rotating_logger_mt<spdlog::async_factory>(
+        "balances",
+        "logs/balances.log",
         max_size,
         max_files
     );

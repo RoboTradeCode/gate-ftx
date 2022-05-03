@@ -17,7 +17,7 @@ namespace ftx
     class WSClient
     {
     public:
-        explicit WSClient(const std::string& api_key, const std::string& api_secret, boost::asio::io_context& ioc, const std::function<void(std::string, void*)>& event_handler);
+        explicit WSClient(const std::string& api_key, const std::string& api_secret, boost::asio::io_context& ioc, const std::function<void(std::string, void*)>& event_handler, const std::shared_ptr<spdlog::logger> &logger);
 
         size_t subscribe_ticker(const std::string &market);
         size_t subscribe_markets();

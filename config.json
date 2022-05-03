@@ -101,7 +101,7 @@
       "exchange": {
         "name": "ftx",
         "instance": 1,
-	"depth": 100
+	"depth": 3
       },
       "account": {
         "api_key": "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ",

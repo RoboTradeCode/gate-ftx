@@ -9,12 +9,12 @@ namespace encoding = util::_encoding;
 namespace ftx {
 
     WSClient::WSClient(const std::string& api_key, const std::string& api_secret,
-                       net::io_context& ioc, const std::function<void(std::string, void*)>& event_handler)
+                       net::io_context& ioc, const std::function<void(std::string, void*)>& event_handler, const std::shared_ptr<spdlog::logger> &logger)
     {
         try{
             m_api_key     = api_key;
             m_api_secret  = api_secret;
-            ws = std::make_shared<util::WS>("ftx.com", "443", "/ws", ioc, event_handler);
+            ws = std::make_shared<util::WS>("ftx.com", "443", "/ws", ioc, event_handler, logger);
             if(api_key.empty() && api_secret.empty())
                 ws->setChannelName("public channel");
             else

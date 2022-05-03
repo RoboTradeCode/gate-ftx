@@ -4,37 +4,50 @@
 namespace pt = boost::property_tree;
 using namespace aeron::util;
 using namespace aeron;
-/*
-logger_type ftxgateway_logger(keywords::channel = "ftxGateway");
-logger_type orderbook_logger(keywords::channel = "ftxOrderBook");
-logger_type ping_pong_logger(keywords::channel = "ftxPingPong");
-using boost::multiprecision::cpp_dec_float_50;
-*/
+
 namespace ftx {
+
 gateway::gateway(const std::string& config_file_path_)
  : _general_logger(spdlog::get("general")),
    _ping_pong_logger(spdlog::get("pingpong")),
-   _orderbook_logger(spdlog::get("orderbooks"))
+   _orderbook_logger(spdlog::get("orderbooks")),
+   _balances_logger(spdlog::get("balances")),
+   _errors_logger(spdlog::get("errors"))
 {
 
     // установим имя файла, при появлении которого необходимо отправить баланс
     _path = "balance";
 
-    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "Starting";
     _general_logger->info("Starting...");
     // получаем дефолтную конфигурацию конфигурацию
     _default_config = parse_config(config_file_path_);
     bss::error error;
     // создаём канал агента
-  /*  if (!create_agent_channel(error)) {
+    if (!create_agent_channel(error)) {
         error.describe("Ошибка создание канала получения конфигурации.");
         //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << error.to_string();
         _general_logger->error(error.to_string());
         error.clear();
     } else {}
-    get_full_config_request();
-*/
-    load_config(error);
+ /*   get_full_config_request();*/
+
+    //---- for test ----
+    /*simdjson::padded_string s = simdjson::padded_string::load("config.json");
+    uint64_t start1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    for(int i =0; i< 100; ++i)
+        //test_dom(s, error);
+        test_ondemand(s, error);
+    uint64_t stop1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    std::cout << stop1-start1 << std::endl;
+
+    uint64_t start2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    for(int i =0; i< 100; ++i)
+        //test_ondemand(s, error);
+        test_dom(s, error);
+    uint64_t stop2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    std::cout << stop2-start2 << std::endl;*/
+    //------------------
+  /*  load_config(error);
     // запоминаем время для отправки пинга
     _last_ping_time = std::chrono::system_clock::now();
     // создаём каналы aeron, websocket и rest
@@ -44,7 +57,7 @@ gateway::gateway(const std::string& config_file_path_)
     create_public_ws();
 
     // проверяем и отправляем баланс
-    check_balance();
+    check_balance();*/
     // получаем характеристики валютной пары
 /*    curr_characters = ftx_rest_private->list_markets("BTC/USDT", _error);
     if(_error){
@@ -79,12 +92,32 @@ gateway::gateway(const std::string& config_file_path_)
     }*/
 }
 //--------------------------------------------------------
+//
+//--------------------------------------------------------
+bool gateway::prepare()
+{
+    // запоминаем время для отправки пинга
+    _last_ping_time = std::chrono::system_clock::now();
+    // создаём каналы aeron, websocket и rest
+    if (create_aeron_channel()) {
+        create_private_REST();
+        create_private_ws();
+        create_public_ws();
+
+        // проверяем и отправляем баланс
+        check_balance();
+        return true;
+    } else {
+        return false;
+    }
+}
+//--------------------------------------------------------
 // инициализация
 //--------------------------------------------------------
 void gateway::initialization()
 {
     // ждем получения конфига 30 секунд (эта хрень временно)
-    int waiter_count = 0;
+    /*int waiter_count = 0;
     while (waiter_count < 300) {
         if (_subscriber_agent_channel)
             _subscriber_agent_channel->poll();
@@ -96,6 +129,7 @@ void gateway::initialization()
     if (_config_was_received == false) {
         // то загрузим его из файла
     }
+    int check = 0;*/
 }
 //--------------------------------------------------------
 // создаёт канал для приёма конфига от агента
@@ -135,7 +169,7 @@ bool gateway::create_agent_channel(bss::error& error_)
 //---------------------------------------------------------------
 // загружает конфиг из файла
 //---------------------------------------------------------------
-void gateway::load_config(bss::error& error_) noexcept
+bool gateway::load_config(bss::error& error_) noexcept
 {
     // создаем парсер
     simdjson::dom::parser parser;
@@ -155,7 +189,7 @@ void gateway::load_config(bss::error& error_) noexcept
                 } else {
                     error_.describe("При загрузке конфигурации в теле json не найден оъект is_new.");
                     // скорее всего дальше незачем парсить
-                    return ;
+                    return false;
                 }
                 // получим рынки, с которыми предстоит работать
                 if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
@@ -270,6 +304,10 @@ void gateway::load_config(bss::error& error_) noexcept
     } else {
         error_.describe("Ошибка инициализации парсера simdjson (внутренний буфер не выделился).");
     }
+    if (not error_)
+        return true;
+    else
+        return false;
 }
 //---------------------------------------------------------------
 //
@@ -288,7 +326,8 @@ bool gateway::create_aeron_channel()
                 _work_config.aeron_core.subscribers.core.channel, _work_config.aeron_core.subscribers.core.stream_id);
     }
     catch(std::exception& err){
-        std::cout << err.what() << std::endl;
+        //std::cout << err.what() << std::endl;
+        _general_logger->info("Ошибка при создании одного из канала aeron: {}", err.what());
         result = false;
     }
     return result;
@@ -298,26 +337,36 @@ bool gateway::create_aeron_channel()
 //---------------------------------------------------------------
 void gateway::create_public_ws()
 {
-    _ftx_ws_public    = std::make_shared<ftx::WSClient>("", "", ioc, [&](std::string_view message_, void* id_)
-                            {shared_from_this()->public_ws_handler(message_, id_);});
+    _ftx_ws_public    = std::make_shared<ftx::WSClient>("",
+                                                        "",
+                                                        ioc,
+                                                        [&](std::string_view message_, void* id_)
+                            {shared_from_this()->public_ws_handler(message_, id_);},
+                                                        _errors_logger);
     // подписываемся на публичный поток ticker
     //ftx_ws_public->subscribe_ticker("BTC/USDT");
     //ftx_ws_public->subscribe_ticker("ETH/USDT");
     // подписываемся на канал ордербуков
-    //_ftx_ws_public->subscribe_orderbook("BTC/USDT");
+    size_t szt = _ftx_ws_public->subscribe_orderbook("BTC/USDT");
+    _general_logger->info("Подписываемся на BTC/USDT. Результат: {}", szt);
     //ftx_ws_public->subscribe_orderbook("ETH/USDT");
     // подписываемся на канал ордербуков
-    for (auto market : _work_config._markets) {
-        _ftx_ws_public->subscribe_orderbook(market);
-    }
+    /*for (auto market : _work_config._markets) {
+        size_t szt = _ftx_ws_public->subscribe_orderbook(market);
+        _general_logger->info("Подписываемся на {}. Результат: {}", market, szt);
+    }*/
 }
 //---------------------------------------------------------------
 // создаёт приватный WS
 //---------------------------------------------------------------
 void gateway::create_private_ws()
 {
-    _ftx_ws_private   = std::make_shared<ftx::WSClient>(_work_config.account.api_key, _work_config.account.secret_key, ioc, [&](std::string_view message_, void* id_)
-                            {shared_from_this()->private_ws_handler(message_, id_);});
+    _ftx_ws_private   = std::make_shared<ftx::WSClient>(_work_config.account.api_key,
+                                                        _work_config.account.secret_key,
+                                                        ioc,
+                                                        [&](std::string_view message_, void* id_)
+                            {shared_from_this()->private_ws_handler(message_, id_);},
+                                                        _errors_logger);
     // авторизуемся в приватном ws
     std::string error;
     // количество попыток
@@ -391,6 +440,11 @@ void gateway::pool()
         }
     }*/
 }
+void gateway::pool_from_agent()
+{
+    _subscriber_agent_channel->poll();
+    ioc.run_for(std::chrono::microseconds(100));
+}
 //---------------------------------------------------------------
 // принимает конфиг от агента
 //---------------------------------------------------------------
@@ -419,29 +473,53 @@ void gateway::config_from_agent_handler(std::string_view message_)
                 // скорее всего дальше незачем парсить
                 //return ;
             }
+            // получим рынки, с которыми предстоит работать
+            if (auto markets_array{parse_result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
+                for (auto market : markets_array) {
+                    if (auto common_symbol_element{market["common_symbol"].get_c_str()}; simdjson::SUCCESS == common_symbol_element.error()) {
+                        //std::cout << common_symbol_element.value() << std::endl;
+                        //std::string_view mrk = common_symbol_element.value();
+                        _work_config._markets.push_back(common_symbol_element.value());
+                    } else {
+                        _error.describe("При загрузке конфигурации в теле json не найден объект \"common_symbol\".");
+                    }
+                }
+            } else {
+                _error.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
+            }
             // получим часть пути для сокращения полного пути до элементов
             if (auto cfg = parse_result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
-                // получаем все необходимые элементы
+                // получаем имя биржи
                 if (auto name_element{cfg["exchange"]["name"].get_string()}; simdjson::SUCCESS == name_element.error()){
                     _work_config.exchange.name = name_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                 }
+                // получаем instance
                 if (auto instance_element{cfg["exchange"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
                     _work_config.exchange.instance = instance_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
                 }
+                // получаем глубину стакана
+                if (auto orderbook_depth_element{cfg["exchange"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
+                    _work_config.exchange.orderbook_depth = orderbook_depth_element.value();
+                } else {
+                    _error.describe("При загрузке конфигурации в теле json не найден оъект \"depth\".");
+                }
+                // получаем ключ
                 if (auto api_key_element{cfg["account"]["api_key"].get_string()}; simdjson::SUCCESS == api_key_element.error()) {
                     _work_config.account.api_key = api_key_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"api_key\".");
                 }
+                // получаем ключ
                 if (auto secret_key_element{cfg["account"]["secret_key"].get_string()}; simdjson::SUCCESS == secret_key_element.error()) {
                     _work_config.account.secret_key = secret_key_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                 }
+                // получаем данные для канала оредбуков
                 if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbook"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                     _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
                 } else {
@@ -452,6 +530,7 @@ void gateway::config_from_agent_handler(std::string_view message_)
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook stream_id\".");
                 }
+                // получаем данные для канала балансов
                 if (auto balance_channel_element{cfg["aeron"]["publishers"]["balance"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
                     _work_config.aeron_core.publishers.balance.channel = balance_channel_element.value();
                 } else {
@@ -462,6 +541,7 @@ void gateway::config_from_agent_handler(std::string_view message_)
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"balance stream_id\".");
                 }
+                // получаем данные для канала логов
                 if (auto log_channel_element{cfg["aeron"]["publishers"]["log"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
                     _work_config.aeron_core.publishers.logs.channel = log_channel_element.value();
                 } else {
@@ -472,6 +552,18 @@ void gateway::config_from_agent_handler(std::string_view message_)
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"log stream_id\".");
                 }
+                // получаем данные для канала статуса ордеров
+                if (auto order_status_channel_element{cfg["aeron"]["publishers"]["order_status"]["channel"].get_string()}; simdjson::SUCCESS == order_status_channel_element.error()) {
+                    _work_config.aeron_core.publishers.order_status.channel = order_status_channel_element.value();
+                } else {
+                    _error.describe("При загрузке конфигурации в теле json не найден оъект \"order_status channel\".");
+                }
+                if (auto order_status_stream_element{cfg["aeron"]["publishers"]["order_status"]["stream_id"].get_int64()}; simdjson::SUCCESS == order_status_stream_element.error()) {
+                    _work_config.aeron_core.publishers.order_status.stream_id = order_status_stream_element.value();
+                } else {
+                    _error.describe("При загрузке конфигурации в теле json не найден оъект \"order_status stream_id\".");
+                }
+                // получаем данные для канала команд
                 if (auto core_channel_element{cfg["aeron"]["subscribers"]["core"]["channel"].get_string()}; simdjson::SUCCESS == core_channel_element.error()) {
                     _work_config.aeron_core.subscribers.core.channel = core_channel_element.value();
                 } else {
@@ -482,9 +574,10 @@ void gateway::config_from_agent_handler(std::string_view message_)
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"core stream_id\".");
                 }
-                /*if (not _error)
+                std::cout << _error.to_string() << std::endl;
+                //if (!_error) объекта is_new нет, и поэтому _error будет содержать ошибку и мы тогда не сможем установиоть флаг
                     // установим флаг о том что конфиг был получен
-                    _config_was_received = true;*/
+                    _config_was_received = true;
             } else {
                 _error.describe("При загрузке конфигурации в теле json не найден оъект [\"data\"][\"gate_config\"].");
             }
@@ -1620,34 +1713,6 @@ void gateway::place_order_result_handler(std::string_view message_)
     }
 }
 //---------------------------------------------------------------
-// отправляет в ядро информацию о лучших ценовых предложениях
-//---------------------------------------------------------------
-void gateway::ticker_sender(const STicker& best_ticker_, void* id_)
-{
-    pt::ptree root_ticker;
-    root_ticker.put("exchange", "ftx");
-    //root_ticker.put("s", "BTC-USDT");
-    root_ticker.put("s", best_ticker_.s);
-    root_ticker.put("b", best_ticker_.b);
-    root_ticker.put("B", best_ticker_.B);
-    root_ticker.put("a", best_ticker_.a);
-    root_ticker.put("A", best_ticker_.A);
-    std::stringstream jsonForCore;
-    pt::write_json(jsonForCore, root_ticker, false);
-    // отправляем json в aeron
-    std::string message = jsonForCore.str();
- /*   const std::int64_t result = orderbook_channel->offer(message);
-    if(result < 0){
-        processing_error("error: Ошибка отправки информации о лучших ценовых предложениях в ядро: ", result);
-    }
-    else*/{
-//        BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) <<
-//                 //"send info about ticker: " << jsonForCore.str();
-//                 fmt::format("send info about ticker ({}): ", id_) << jsonForCore.str();
-        _orderbook_logger->info("send info about ticker ({}): {}", id_, jsonForCore.str());
-    }
-}
-//---------------------------------------------------------------
 // отправляет в ядро информацию об открытых ордерах
 //---------------------------------------------------------------
 void gateway::order_sender(const std::vector<SOrder> &orders_vector_)
@@ -1695,37 +1760,6 @@ void gateway::order_sender(const std::vector<SOrder> &orders_vector_)
 void gateway::balance_sender(const std::vector<SBState>& balances_vector)
 {
     // вспомогательная строка для визуального контроля баланса в консоли/логе
-    /*std::string help_string;
-    // формируем json в определенном формате
-    pt::ptree root;
-    pt::ptree children;
-    for (auto&& balanceState: balances_vector)
-    {
-        pt::ptree balance_node;
-        balance_node.put("exchange", "ftx");
-        balance_node.put("a", balanceState.coin);
-        balance_node.put("f", std::to_string(balanceState.free));
-        children.push_back(std::make_pair("", balance_node));
-        help_string += std::to_string(balanceState.total);
-        help_string += " ";
-    }
-    root.add_child("B", children);
-    std::stringstream jsonForCore;
-    pt::write_json(jsonForCore, root);
-    //отправляем json в aeron
-    const std::int64_t result = _balance_channel->offer(jsonForCore.str());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации о балансе в ядро: ", result);
-    }
-    else
-    {
-//        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "send info about balance: " <<
-//                                                                 jsonForCore.str()<<
-//                                                                 " total: " <<
-//                                                                 help_string;
-        _general_logger->info("send info about balance: {} total: {}", jsonForCore.str(), help_string);
-    }*/
     JSON balance_root;
     balance_root["event"]     = "data";
     balance_root["exchange"]  = "ftx";
@@ -1753,11 +1787,8 @@ void gateway::balance_sender(const std::vector<SBState>& balances_vector)
     }
     else
     {
-//        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "send info about balance: " <<
-//                                                                 jsonForCore.str()<<
-//                                                                 " total: " <<
-//                                                                 help_string;
         _general_logger->info("send info about balance: {}", balance_root.dump());
+        _balances_logger->info("send info about balance: {}", balance_root.dump());
         // вставим пустую строку для наглядности
         std::cout << "" << std::endl;
     }
@@ -1765,34 +1796,34 @@ void gateway::balance_sender(const std::vector<SBState>& balances_vector)
 //---------------------------------------------------------------
 // обрабатывает ошибку
 //---------------------------------------------------------------
-void gateway::processing_error(std::string_view message_, const std::int64_t& error_code_)
+void gateway::processing_error(std::string_view error_source_, const std::int64_t& error_code_)
 {
-    //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << message_;
-    _general_logger->info(message_);
+    _general_logger->info(error_source_);
+    _errors_logger->error(error_source_);
     if(error_code_ == BACK_PRESSURED)
     {
-        //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "Offer failed due to back pressure.";
-        _general_logger->error("Offer failed due to back pressure.");
+        _general_logger->error(BACK_PRESSURED_DESCRIPTION);
+        _errors_logger->error(BACK_PRESSURED_DESCRIPTION);
     }
     else if(error_code_ == NOT_CONNECTED)
     {
-        //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "Offer failed because publisher is not conntected to a core.";
-        _general_logger->error("Offer failed because publisher is not conntected to a core.");
+        _general_logger->error(NOT_CONNECTED_DESCRIPTION);
+        _errors_logger->error(NOT_CONNECTED_DESCRIPTION);
     }
     else if(error_code_ == ADMIN_ACTION)
     {
-        //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "Offer failed because of an administration action in the system.";
-        _general_logger->error("Offer failed because of an administration action in the system.");
+        _general_logger->error(ADMIN_ACTION_DESCRIPTION);
+        _errors_logger->error(ADMIN_ACTION_DESCRIPTION);
     }
     else if(error_code_ == PUBLICATION_CLOSED)
     {
-        //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "Offer failed because publication is closed.";
-        _general_logger->error("Offer failed because publication is closed.");
+        _general_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
+        _errors_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
     }
     else
     {
-        //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "Offer failed due to unknkown reason.";
-        _general_logger->error("Offer failed due to unknkown reason.");
+        _general_logger->error(UNKNOWN_DESCRIPTION);
+        _errors_logger->error(UNKNOWN_DESCRIPTION);
     }
 }
 //---------------------------------------------------------------
@@ -1903,6 +1934,20 @@ void gateway::error_sender(std::string_view message_)
     _general_logger->info(message_);
 }
 //---------------------------------------------------------------
+// проверяет, получен ли конфиг
+//---------------------------------------------------------------
+bool gateway::has_config()
+{
+    return _config_was_received;
+}
+//---------------------------------------------------------------
+// посылает запрос на получение конфига
+//---------------------------------------------------------------
+void gateway::send_config_request()
+{
+    get_full_config_request();
+}
+//---------------------------------------------------------------
 // // запрос на получение полного конфига
 //---------------------------------------------------------------
 void gateway::get_full_config_request()
@@ -1923,7 +1968,16 @@ void gateway::get_full_config_request()
         processing_error("error: Ошибка отправки запроса получения полного конфига: ", result);
     } else {
         //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "send info about ticker: " << full_cfg_request.dump();
+        _general_logger->info("Отправлен запрос на получение полного конфига.");
     }
+}
+//---------------------------------------------------------------
+// посылает ошибку в лог и в консоль
+//---------------------------------------------------------------
+void gateway::send_error(std::string_view error_)
+{
+    _general_logger->error(error_);
+    _errors_logger->error(error_);
 }
 }
 

@@ -3,16 +3,17 @@
 #include <memory>
 #include <iostream>
 
-logger_type error_logger(keywords::channel = "error");
+//logger_type error_logger(keywords::channel = "error");
 
 namespace util
 {
 
 
     WS::WS(std::string host, const std::string& port, const std::string& target,
-           net::io_context& ioc, std::function<void(std::string, void*)> event_handler)
+           net::io_context& ioc, std::function<void(std::string, void*)> event_handler, const std::shared_ptr<spdlog::logger> &logger)
         :event_handler(std::move(event_handler))
     {
+        _errors_logger = logger;
         ssl::context ssl_ctx{ssl::context::tls_client};
         //ssl::context ssl_ctx{ssl::context::tlsv12_client};
         // какая-то не понятная дичь взятая вот от сюда - https://github.com/djarek/certify/blob/2d719a9ad79ce1a61684278a30196527e412a0b6/examples/get_page.cpp#L77
@@ -91,10 +92,12 @@ namespace util
              * ERROR: handshake: Connection reset by peer [system:104], но где непонятно. Приложение просто завершило
              * работу
              */
-            BOOST_LOG_SEV(error_logger, logging::trivial::info) << "what: " << ec.what()
+            /*BOOST_LOG_SEV(error_logger, logging::trivial::info) << "what: " << ec.what()
                                                                 << " message: " << ec.message()
                                                                 << " bytes: " << bytes_transgerred
-                                                                << " channel " << channelName;;
+                                                                << " channel " << channelName;*/
+            _errors_logger->error("Wat: {}, message {}, channel {}.", ec.what(), ec.message(), channelName);
+
             throw std::runtime_error("on_read: " + channelName);
         }
 

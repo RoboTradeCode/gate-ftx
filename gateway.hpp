@@ -49,12 +49,20 @@ class gateway : public std::enable_shared_from_this<gateway>
     std::shared_ptr<spdlog::logger>  _general_logger;
     std::shared_ptr<spdlog::logger>  _ping_pong_logger;
     std::shared_ptr<spdlog::logger>  _orderbook_logger;
+    std::shared_ptr<spdlog::logger>  _balances_logger;
+    std::shared_ptr<spdlog::logger>  _errors_logger;
     //std::shared_ptr<ftx::AsyncRESTClient> ftx;
 
+    const char* BACK_PRESSURED_DESCRIPTION     = "Offer failed due to back pressure.";
+    const char* NOT_CONNECTED_DESCRIPTION      = "Offer failed because publisher is not conntected to a core.";
+    const char* ADMIN_ACTION_DESCRIPTION       = "Offer failed because of an administration action in the system.";
+    const char* PUBLICATION_CLOSED_DESCRIPTION = "Offer failed because publication is closed.";
+    const char* UNKNOWN_DESCRIPTION            = "Offer failed due to unknkown reason.";
+
+    bool        _config_was_received = false;
     //------- для отладки  ---------------------
     int                             ws_control = 0;
     bool                            start_trigger = false;
-    bool                            _config_was_received = false;
     //---------------------------------------------------
     //https://www.geeksforgeeks.org/implementing-multidimensional-map-in-c/
     //std::map<double, double, std::greater<double>>  _bids_map;
@@ -84,15 +92,15 @@ class gateway : public std::enable_shared_from_this<gateway>
     void        aeron_handler(std::string_view message_);
     // создаёт канал для приёма конфига от агента
     bool        create_agent_channel(bss::error& error_);
-    // запрос на получение полного конфига
+    // запрос на получение полного конфига  ????
     void        get_full_config_request();
     // принимает конфиг от агента
     void        config_from_agent_handler(std::string_view message_);
-    // загружает конфиг из файла
-    void        load_config(bss::error& error_) noexcept;
     void        private_ws_handler(std::string_view message_, void* id_);
     // callback функция результата выставления оредров
     void        place_order_result_handler(std::string_view message_);
+    // обрабатывает и логирует ошибку от каналов aeron
+    void        processing_error(std::string_view error_source_, const std::int64_t& error_code_);
     // обрабатывает ордер на покупку
     //void        buy_order(std::string_view price_, std::string_view quantity_);
     void        buy_order(const std::string& symbol, const double& price, const double& quantity);
@@ -118,7 +126,15 @@ public:
     explicit gateway(const std::string& config_file_path_);
 
     void    initialization();
-
+    // отпраляет запрос на получение конфига
+    void    send_config_request();
+    // проверяет получен ли конфиг
+    bool    has_config();
+    // загружает конфиг из файла
+    bool    load_config(bss::error& error_) noexcept;
+    // посылает ошибку в консоль и лог
+    void    send_error(std::string_view error_);
+    //
     bool    create_aeron_channel();
     //
     void    create_public_ws();
@@ -127,6 +143,10 @@ public:
     void    create_private_REST();
     //
     void    pool();
+    //
+    void    pool_from_agent();
+    // подготовка к запуску (создает каналы aeron, сокеты и т.д.)
+    bool    prepare();
     // подготавливаем стакан
     void    orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_);
     // отправляем стакан
@@ -135,8 +155,6 @@ public:
     void    order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result, bool is_error = false, std::string error_ = "");
     // отправляем order_status
     void    order_status_sender(std::string_view order_status_);
-    //
-    void    ticker_sender(const STicker& best_ticker_, void* id_);
     // проверяет баланс
     void    check_balance(/*const bool& start_trigger_ = false*/);
     //
@@ -144,14 +162,13 @@ public:
     //
     void    order_sender(const std::vector<SOrder>& orders_vector_);
     //
-    void    processing_error(std::string_view message_, const std::int64_t& error_code_);
-    //
     void    restart_public_ws();
     //
     void    restart_private_ws(const std::string& reason_);
     //void    restart_private_REST();
 
     void create_json();
+
 };
 }
 
