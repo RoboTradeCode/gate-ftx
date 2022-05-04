@@ -43,7 +43,7 @@ int main() {
             }
             // если конфиг не был получен, то работать нет смысла
             if (!gateway->has_config()) {
-                std::cout << "Файл конфигурации не получен." << std::endl;
+                gateway->send_error("Файл конфигурации не получен.");
                 std::this_thread::sleep_for(1s);
                 return EXIT_FAILURE;
             }

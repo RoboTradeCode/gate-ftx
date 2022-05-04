@@ -174,7 +174,7 @@ bool gateway::load_config(bss::error& error_) noexcept
     // создаем парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
-    auto &&error_code = parser.allocate(0x1000, 0x08);
+    auto &&error_code = parser.allocate(0x1000, 0x10);
     // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         auto load_result = simdjson::padded_string::load("config.json");
@@ -189,7 +189,7 @@ bool gateway::load_config(bss::error& error_) noexcept
                 } else {
                     error_.describe("При загрузке конфигурации в теле json не найден оъект is_new.");
                     // скорее всего дальше незачем парсить
-                    return false;
+                    //return false;
                 }
                 // получим рынки, с которыми предстоит работать
                 if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
@@ -206,7 +206,7 @@ bool gateway::load_config(bss::error& error_) noexcept
                     error_.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
                 }
                 // получим часть пути для сокращения полного пути до элементов
-                if (auto cfg = result["data"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
+                if (auto cfg = result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
                     // получаем имя биржи
                     if (auto name_element{cfg["exchange"]["name"].get_string()}; simdjson::SUCCESS == name_element.error()){
                         _work_config.exchange.name = name_element.value();
@@ -296,7 +296,7 @@ bool gateway::load_config(bss::error& error_) noexcept
                     error_.describe("При загрузке конфигурации в теле json не найден оъект [\"data\"][\"gate_config\"].");
                 }
             } else {
-                error_.describe(fmt::format("Ошибка разбора json фрейма {}.", result.error()));
+                error_.describe(fmt::format("Ошибка разбора json фрейма в процессе парсинга конфига. Код ошибки: {}.", result.error()));
             }
         } else {
             error_.describe("Ошибка загрузки файла конфигурации.");
@@ -347,14 +347,14 @@ void gateway::create_public_ws()
     //ftx_ws_public->subscribe_ticker("BTC/USDT");
     //ftx_ws_public->subscribe_ticker("ETH/USDT");
     // подписываемся на канал ордербуков
-    size_t szt = _ftx_ws_public->subscribe_orderbook("BTC/USDT");
-    _general_logger->info("Подписываемся на BTC/USDT. Результат: {}", szt);
+    //size_t szt = _ftx_ws_public->subscribe_orderbook("BTC/USDT");
+    //_general_logger->info("Подписываемся на BTC/USDT. Результат: {}", szt);
     //ftx_ws_public->subscribe_orderbook("ETH/USDT");
     // подписываемся на канал ордербуков
-    /*for (auto market : _work_config._markets) {
+    for (auto market : _work_config._markets) {
         size_t szt = _ftx_ws_public->subscribe_orderbook(market);
         _general_logger->info("Подписываемся на {}. Результат: {}", market, szt);
-    }*/
+    }
 }
 //---------------------------------------------------------------
 // создаёт приватный WS
@@ -443,7 +443,7 @@ void gateway::pool()
 void gateway::pool_from_agent()
 {
     _subscriber_agent_channel->poll();
-    ioc.run_for(std::chrono::microseconds(100));
+    //ioc.run_for(std::chrono::microseconds(100));
 }
 //---------------------------------------------------------------
 // принимает конфиг от агента
@@ -454,11 +454,11 @@ void gateway::config_from_agent_handler(std::string_view message_)
     if (_config_was_received == true)
         return;
     _error.clear();
-    std::cout << "config was received" << message_ << std::endl;
+    //std::cout << "config was received" << message_ << std::endl;
     // создаем парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
-    auto &&error_code = parser.allocate(0x1000, 0x12);
+    auto &&error_code = parser.allocate(0x1000, 0x10);
     // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         // разбираем пришедшие данные
@@ -1651,7 +1651,7 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 //---------------------------------------------------------------
 void gateway::orderbook_sender(std::string_view orderbook_)
 {
-    //std::cout << orderbook_ << std::endl;
+    std::cout << orderbook_ << std::endl;
     //std::cout << orderbook_.size() << std::endl;
     const std::int64_t result = _orderbook_channel->offer(orderbook_.data());
     if(result < 0)
@@ -1773,14 +1773,14 @@ void gateway::balance_sender(const std::vector<SBState>& balances_vector)
     for (auto&& balance: balances_vector) {
         JSON asset;
         asset["free"]  = balance.free;
-        asset["used"]  = balance.usdValue;
+        asset["used"]  = (double)(balance.total - balance.free);
         asset["total"] = balance.total;
         data[balance.coin] = asset;
     }
     balance_root["data"] = data;
     //отправляем json в aeron
-    //std::cout << balance_root.dump() << std::endl;
-    const std::int64_t result = _balance_channel->offer(balance_root.dump());
+    std::cout << balance_root.dump() << std::endl;
+    std::int64_t result = _balance_channel->offer(balance_root.dump());
     if(result < 0)
     {
         processing_error("error: Ошибка отправки информации о балансе в ядро: ", result);
@@ -1791,6 +1791,12 @@ void gateway::balance_sender(const std::vector<SBState>& balances_vector)
         _balances_logger->info("send info about balance: {}", balance_root.dump());
         // вставим пустую строку для наглядности
         std::cout << "" << std::endl;
+    }
+    // теперь отравим все это дело в лог
+    result = _log_channel->offer(balance_root.dump());
+    if(result < 0)
+    {
+        processing_error("error: Ошибка отправки информации о балансах в лог: ", result);
     }
 }
 //---------------------------------------------------------------
@@ -1915,7 +1921,6 @@ void gateway::check_balance(/*const bool &start_trigger_*/)
     if(balances_vector.empty()){
         if(_error){
             _error.describe("Ошибка получения баланса (get_balances).");
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
             _general_logger->error(_error.to_string());
             _error.clear();
         }

@@ -320,7 +320,8 @@ namespace ftx {
         http::response<http::string_body> response;
         try
         {
-            /*auto*/ response = http_client.get("wallet/balances");
+            response = http_client.get("wallet/balances");
+            //response = http_client.get("wallet/all_balances");
             //try
             //{
                 //std::cout<<response.body().c_str()<<std::endl;
