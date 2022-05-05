@@ -30,7 +30,6 @@ int main() {
         } else {
             // если файла нет, то работаем через агента
             gateway->send_config_request();
-            //_gateway_->initialization();
             // получаем конфиг (ожидаем 5 секунд, если получаем быстрее, то выходим из цикла)
             int try_count = 0;
             while( try_count < 5) {
@@ -49,8 +48,8 @@ int main() {
             }
         }
 
-        // продолжаем работу
-        if (not gateway->prepare()) {
+        // продолжаем подготовку к запуску
+        if (not gateway->preparation_for_launch()) {
             return EXIT_FAILURE;
         }
         signal(SIGINT, sigint_handler);

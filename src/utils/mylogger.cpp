@@ -6,8 +6,8 @@
 void init_logger()
 {
     // Параметры для логирования в файлы
-    int max_size = 1048576 * 2;  // 2 MiB
-    int max_files = 5;
+    int max_size = 1048576 * 20;  // 20 MiB
+    int max_files = 10;
 
     // Логирование биржевых стаканов
     auto orderbooks = spdlog::rotating_logger_mt<spdlog::async_factory>(

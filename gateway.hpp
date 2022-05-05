@@ -65,14 +65,9 @@ class gateway : public std::enable_shared_from_this<gateway>
     bool                            start_trigger = false;
     //---------------------------------------------------
     //https://www.geeksforgeeks.org/implementing-multidimensional-map-in-c/
-    //std::map<double, double, std::greater<double>>  _bids_map;
-    //std::map<std::string, std::map<double, double, std::greater<double>>>          _bids_map;
-    //std::map<std::string, std::map<double, double>>          _asks_map;
-
     /* идем попорядку:
      * содержит массив рынков (рынок является ключом)
      * значением является map, у которого ключ это массивы "ask" и "bid", а значением являются "стаканы"
-     *
      */
     map<string, map<string, map<double, double>, std::greater<string>>>                   _markets_map;
 
@@ -82,8 +77,8 @@ class gateway : public std::enable_shared_from_this<gateway>
     gate_config                     _work_config;
     boost::asio::io_context         ioc;
     bss::error                      _error;
-    STicker                         prev_ticker;
-    SCurrencyCharacteristics        curr_characters;
+    //STicker                         prev_ticker;
+    //SCurrencyCharacteristics        curr_characters;
     std::filesystem::path           _path;
     // переменная для отсечки времени отправки ping-а
     std::chrono::time_point<std::chrono::system_clock>  _last_ping_time;
@@ -103,29 +98,31 @@ class gateway : public std::enable_shared_from_this<gateway>
     void        processing_error(std::string_view error_source_, const std::int64_t& error_code_);
     // обрабатывает ордер на покупку
     //void        buy_order(std::string_view price_, std::string_view quantity_);
-    void        buy_order(const std::string& symbol, const double& price, const double& quantity);
+    //void        buy_order(const std::string& symbol, const double& price, const double& quantity);
     // обрабатывает отмену ордера на покупку
-    void        cancel_buy_order(const int64_t& order_id);
+    //void        cancel_buy_order(const int64_t& order_id);
     // обрабатывает ордер на продажу
     //void        sell_order(std::string_view price_, std::string_view quantity_);
-    void        sell_order(const std::string& symbol, const double& price_, const double& quantity_);
+    //void        sell_order(const std::string& symbol_, const double& price_, const double& quantity_);
     // обрабатывает отмену ордера на продажу
-    void        cancel_sell_order(const int64_t& order_id);
+    //void        cancel_sell_order(const int64_t& order_id);
+    // обрабатывает создание ордера
+    void        create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_);
     // обрабатывает отмену ордера по order_id
     void        cancel_order(const int64_t& order_id);
     // отправляем ошибки
-    void        error_sender(std::string_view message_);
+    //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера
     std::string get_order_change_description(std::string_view side, std::string_view status_, const double& filled_size_, const double& remaining_size_);
 
-    void        get_precision(SCurrencyCharacteristics& curr_characteristic_);
+    /*void        get_precision(SCurrencyCharacteristics& curr_characteristic_);
     int         get_precision(double value_);
     std::string set_size_precision(std::string value_);
-    std::string set_price_precision(std::string value_);
+    std::string set_price_precision(std::string value_);*/
 public:
+    // конструктор
     explicit gateway(const std::string& config_file_path_);
 
-    void    initialization();
     // отпраляет запрос на получение конфига
     void    send_config_request();
     // проверяет получен ли конфиг
@@ -146,7 +143,7 @@ public:
     //
     void    pool_from_agent();
     // подготовка к запуску (создает каналы aeron, сокеты и т.д.)
-    bool    prepare();
+    bool    preparation_for_launch();
     // подготавливаем стакан
     void    orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_);
     // отправляем стакан
