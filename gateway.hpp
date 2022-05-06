@@ -153,7 +153,7 @@ public:
     // отправляем order_status
     void    order_status_sender(std::string_view order_status_);
     // проверяет баланс
-    void    check_balance(/*const bool& start_trigger_ = false*/);
+    void    check_balances(/*const bool& start_trigger_ = false*/);
     //
     void    balance_sender(const std::vector<SBState>& balances_vector_);
     //

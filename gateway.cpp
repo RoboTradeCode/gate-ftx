@@ -106,9 +106,9 @@ bool gateway::preparation_for_launch()
         create_public_ws();
 
         // проверяем и отправляем баланс
-        check_balance();
+        /*check_balance();
         // получаем открытые ордера по всем рынкам и отменяем их
-        /*for (auto market : _work_config._markets) {
+        for (auto market : _work_config._markets) {
             std::vector<SOrder> orders_vector = _ftx_rest_private->get_open_orders(market, _error);
             if(orders_vector.size() != 0) {
                 _general_logger->info("Есть открытые ордера");
@@ -658,6 +658,8 @@ void gateway::aeron_handler(std::string_view message_)
                                         else if (action.compare("create_order") == 0 /*&& side.compare("buy") == 0*/) {
                                             //buy_order(symbol, price, amount);
                                             create_order(side, symbol, price, amount);
+                                        } else if (action.compare("get_balances")){
+                                            check_balances();
                                         } else {
                                             //_error.describe("Не могу распознать action и side в команде от ядра {}.", message_);
                                             _general_logger->error("Не могу распознать action и side в команде от ядра {}.", message_.data());
@@ -1240,7 +1242,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_)
                             balance_sender(balances_vector);
                         }*/
                         // проверяем и отправляем баланс
-                        check_balance();
+                        check_balances();
                         // сбросим счётчик
                         ws_control = 0;
                         // сбросим триггер
@@ -1699,7 +1701,7 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 //---------------------------------------------------------------
 void gateway::orderbook_sender(std::string_view orderbook_)
 {
-    std::cout << orderbook_ << std::endl;
+    //std::cout << orderbook_ << std::endl;
     //std::cout << orderbook_.size() << std::endl;
     const std::int64_t result = _orderbook_channel->offer(orderbook_.data());
     if(result < 0)
@@ -1856,27 +1858,27 @@ void gateway::processing_error(std::string_view error_source_, const std::int64_
     _errors_logger->error(error_source_);
     if(error_code_ == BACK_PRESSURED)
     {
-        _general_logger->error(BACK_PRESSURED_DESCRIPTION);
+        //_general_logger->error(BACK_PRESSURED_DESCRIPTION);
         _errors_logger->error(BACK_PRESSURED_DESCRIPTION);
     }
     else if(error_code_ == NOT_CONNECTED)
     {
-        _general_logger->error(NOT_CONNECTED_DESCRIPTION);
+        //_general_logger->error(NOT_CONNECTED_DESCRIPTION);
         _errors_logger->error(NOT_CONNECTED_DESCRIPTION);
     }
     else if(error_code_ == ADMIN_ACTION)
     {
-        _general_logger->error(ADMIN_ACTION_DESCRIPTION);
+        //_general_logger->error(ADMIN_ACTION_DESCRIPTION);
         _errors_logger->error(ADMIN_ACTION_DESCRIPTION);
     }
     else if(error_code_ == PUBLICATION_CLOSED)
     {
-        _general_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
+        //_general_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
         _errors_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
     }
     else
     {
-        _general_logger->error(UNKNOWN_DESCRIPTION);
+        //_general_logger->error(UNKNOWN_DESCRIPTION);
         _errors_logger->error(UNKNOWN_DESCRIPTION);
     }
 }
@@ -1961,7 +1963,7 @@ std::string gateway::set_price_precision(std::string value)
 //---------------------------------------------------------------
 // проверяет баланс
 //---------------------------------------------------------------
-void gateway::check_balance(/*const bool &start_trigger_*/)
+void gateway::check_balances(/*const bool &start_trigger_*/)
 {
     // получаем баланс
     std::vector<SBState> balances_vector = _ftx_rest_private->get_balances(_error);
