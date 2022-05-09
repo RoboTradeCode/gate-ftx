@@ -19,14 +19,13 @@ namespace ftx {
                 ws->setChannelName("public channel");
             else
                 ws->setChannelName("private channel");
-            //ws = std::make_shared<util::WS>("ftx.com", "8443", "/api/markets", ioc, event_handler);
-            //ws = std::make_shared<util::WS>("ws.okx.com", "8443", "/ws/v5/public", ioc, event_handler);
             ws->async_read();
-            /*ws->configure(m_uri, api_key, api_secret, m_subaccount_name);
-            ws->set_on_open_cb([this]() { return this->on_open(); });*/
         }
         catch(std::exception& ex){
-            throw ex.what();
+            //throw ex.what();
+            std::string exc = ex.what();
+            std::cout << exc << std::endl;
+            throw std::runtime_error(exc);
         }
     }
     size_t WSClient::subscribe_ticker(const std::string& market)

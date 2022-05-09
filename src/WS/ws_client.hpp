@@ -2,7 +2,7 @@
 #define WS_CLIENT_H
 
 #include "WS.hpp"
-/*#include <../external/json.hpp>*/
+#include "iostream"
 #include <string>
 #include <vector>
 

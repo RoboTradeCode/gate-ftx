@@ -2,13 +2,12 @@
 #define DECL_HEADER_H
 
 #include <string>
-//#include <fmt/format.h>
 #include "../spdlog/spdlog.h"
 
 
 using namespace std;
 // описывает состояние баланса
-struct SBState{
+struct s_balances_state{
     // ассет
     std::string coin;
     // общее количество средств
@@ -19,7 +18,7 @@ struct SBState{
     double usdValue;
 };
 
-struct STicker{
+/*struct STicker{
     // тикерный символ
     std::string s;
     // bid, цена лучшей заявки на покупку
@@ -30,8 +29,8 @@ struct STicker{
     std::string a;
     // объём лучшей заявки на продажу
     std::string A;
-};
-struct SOrder{
+};*/
+struct s_order{
     // время создания оредра
     std::string createdAt;
     // идентификатор ордера (присваивается биржей)
@@ -48,7 +47,7 @@ struct SOrder{
     std::string clientId;
 };
 
-struct SCurrencyCharacteristics
+/*struct SCurrencyCharacteristics
 {
     // шаг объёма
     double priceIncrement;
@@ -56,6 +55,6 @@ struct SCurrencyCharacteristics
     double sizeIncrement;
     int    pricePrecision;
     int    sizePrecision;
-};
+};*/
 
 #endif // DECL_HEADER_H

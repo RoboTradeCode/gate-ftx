@@ -33,10 +33,10 @@ void init_logger()
         max_files
     );
 
-    // Логирование ping pong
+    // Логирование сообщений, отправляемых на лог сервер
     auto ping_pong = spdlog::rotating_logger_mt<spdlog::async_factory>(
-        "pingpong",
-        "logs/pingpong.log",
+        "logs",
+        "logs/logs.log",
         max_size,
         max_files
     );

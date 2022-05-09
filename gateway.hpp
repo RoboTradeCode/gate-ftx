@@ -47,8 +47,8 @@ class gateway : public std::enable_shared_from_this<gateway>
 
     // логгеры
     std::shared_ptr<spdlog::logger>  _general_logger;
-    std::shared_ptr<spdlog::logger>  _ping_pong_logger;
-    std::shared_ptr<spdlog::logger>  _orderbook_logger;
+    std::shared_ptr<spdlog::logger>  _logs_logger;
+    //std::shared_ptr<spdlog::logger>  _orderbook_logger;
     std::shared_ptr<spdlog::logger>  _balances_logger;
     std::shared_ptr<spdlog::logger>  _errors_logger;
     //std::shared_ptr<ftx::AsyncRESTClient> ftx;
@@ -60,10 +60,10 @@ class gateway : public std::enable_shared_from_this<gateway>
     const char* UNKNOWN_DESCRIPTION            = "Offer failed due to unknkown reason.";
 
     bool        _config_was_received = false;
-    //------- для отладки  ---------------------
-    int                             ws_control = 0;
-    bool                            start_trigger = false;
-    //---------------------------------------------------
+
+    //int                             ws_control = 0;
+    //bool                            start_trigger = false;
+
     //https://www.geeksforgeeks.org/implementing-multidimensional-map-in-c/
     /* идем попорядку:
      * содержит массив рынков (рынок является ключом)
@@ -72,21 +72,40 @@ class gateway : public std::enable_shared_from_this<gateway>
     map<string, map<string, map<double, double>, std::greater<string>>>                   _markets_map;
 
     // содержит дефолтную конфигурацию
-    gate_config                     _default_config;
+    gate_config                 _default_config;
     // содержит рабочую конфигурацию
-    gate_config                     _work_config;
-    boost::asio::io_context         ioc;
-    bss::error                      _error;
-    //STicker                         prev_ticker;
-    //SCurrencyCharacteristics        curr_characters;
-    std::filesystem::path           _path;
+    gate_config                 _work_config;
+    //
+    boost::asio::io_context     _ioc;
+    // помогает "собрать" ошибки
+    bss::error                  _error;
+    //
+    std::filesystem::path       _path;
     // переменная для отсечки времени отправки ping-а
     std::chrono::time_point<std::chrono::system_clock>  _last_ping_time;
+    // содержит предыдущее успешно отправленное сообщение о балансах в ядро
+    std::string                 _prev_balance_message_core = "none";
+    // содержит предыдущее успешно отправленное сообщение о балансах в лог
+    std::string                 _prev_balance_message_log  = "none";
+    // содержит предыдущее успешно отправленное сообщение об ордербуках
+    std::string                 _prev_orderbook_message    = "none";
+    // содержит предыдущее успешно отправленное сообщение о статусе ордера в ядро
+    std::string                 _prev_order_status_message_core = "none";
+    // содержит предыдущее успешно отправленное сообшение о статусе ордера с лог
+    std::string                 _prev_order_status_message_log  = "none";
 
     void        public_ws_handler(std::string_view message_, void* id_);
     void        aeron_handler(std::string_view message_);
-    // создаёт канал для приёма конфига от агента
-    bool        create_agent_channel(bss::error& error_);
+    // создаёт канал для отправки запроса на получение конфига и канал для приёма конфига от агента
+    bool        create_aeron_agent_channels(bss::error& error_);
+    // создаёт каналы для работы с ядром
+    bool        create_aeron_core_channels(bss::error& error_);
+    // создаёт приватный REST сокет
+    bool        create_private_REST(bss::error& error_);
+    // создаёт приватный WebSocket
+    bool        create_private_ws(bss::error& error_);
+    // создаёт публичный WebSocket
+    bool        create_public_ws(bss::error& error_);
     // запрос на получение полного конфига  ????
     void        get_full_config_request();
     // принимает конфиг от агента
@@ -95,30 +114,18 @@ class gateway : public std::enable_shared_from_this<gateway>
     // callback функция результата выставления оредров
     void        place_order_result_handler(std::string_view message_);
     // обрабатывает и логирует ошибку от каналов aeron
-    void        processing_error(std::string_view error_source_, const std::int64_t& error_code_);
-    // обрабатывает ордер на покупку
-    //void        buy_order(std::string_view price_, std::string_view quantity_);
-    //void        buy_order(const std::string& symbol, const double& price, const double& quantity);
-    // обрабатывает отмену ордера на покупку
-    //void        cancel_buy_order(const int64_t& order_id);
-    // обрабатывает ордер на продажу
-    //void        sell_order(std::string_view price_, std::string_view quantity_);
-    //void        sell_order(const std::string& symbol_, const double& price_, const double& quantity_);
-    // обрабатывает отмену ордера на продажу
-    //void        cancel_sell_order(const int64_t& order_id);
-    // обрабатывает создание ордера
+    void        processing_error(std::string_view error_source_, const std::string& prev_messsage_, const std::int64_t& error_code_);
+    // создает ордер
     void        create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_);
-    // обрабатывает отмену ордера по order_id
+    // отменяет ордер по order_id
     void        cancel_order(const int64_t& order_id);
+    // отменяет все ордера
+    void        cancel_all_orders();
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера
     std::string get_order_change_description(std::string_view side, std::string_view status_, const double& filled_size_, const double& remaining_size_);
 
-    /*void        get_precision(SCurrencyCharacteristics& curr_characteristic_);
-    int         get_precision(double value_);
-    std::string set_size_precision(std::string value_);
-    std::string set_price_precision(std::string value_);*/
 public:
     // конструктор
     explicit gateway(const std::string& config_file_path_);
@@ -131,13 +138,6 @@ public:
     bool    load_config(bss::error& error_) noexcept;
     // посылает ошибку в консоль и лог
     void    send_error(std::string_view error_);
-    //
-    bool    create_aeron_channel();
-    //
-    void    create_public_ws();
-    //
-    void    create_private_ws();
-    void    create_private_REST();
     //
     void    pool();
     //
@@ -155,9 +155,9 @@ public:
     // проверяет баланс
     void    check_balances(/*const bool& start_trigger_ = false*/);
     //
-    void    balance_sender(const std::vector<SBState>& balances_vector_);
+    void    balance_sender(const std::vector<s_balances_state>& balances_vector_);
     //
-    void    order_sender(const std::vector<SOrder>& orders_vector_);
+    //void    order_sender(const std::vector<SOrder>& orders_vector_);
     //
     void    restart_public_ws();
     //

@@ -8,7 +8,7 @@ namespace ftx {
         http_client.configure(uri, api_key, api_secret, subaccount_name);
     }
 
-    SCurrencyCharacteristics RESTClient::list_markets(const std::string market, bss::error& error_)
+    /*SCurrencyCharacteristics RESTClient::list_markets(const std::string market, bss::error& error_)
     {
         SCurrencyCharacteristics returnCharacteristics;
         auto response = http_client.get("markets");
@@ -75,12 +75,12 @@ namespace ftx {
             error_.describe(fmt::format("error в rest private channel: {}", ex.what()));
         }
         return returnCharacteristics;
-    }
+    }*/
 
-    std::vector<SOrder> RESTClient::get_open_orders(const std::string market, bss::error& error_)
+    std::vector<s_order> RESTClient::get_open_orders(const std::string market, bss::error& error_)
     {
 
-        std::vector<SOrder> ordersVector;
+        std::vector<s_order> ordersVector;
         http::response<http::string_body> response;
         try{
             response = http_client.get("orders?market=" + market);
@@ -99,7 +99,7 @@ namespace ftx {
                         auto result_array = result["result"];
                         for(simdjson::dom::object order_unit : result_array)
                         {
-                            SOrder order;
+                            s_order order;
                             order.createdAt = order_unit["createdAt"].value();
                             order.id        = order_unit["id"].value();
                             order.price     = order_unit["price"].value();
@@ -230,12 +230,43 @@ namespace ftx {
     auto response = http_client.post("orders", payload.dump());
     return json_loh::parse(response.body());
 }*/
-    std::string RESTClient::cancel_all_orders(const std::string market)
+    std::string RESTClient::cancel_all_orders(const std::string market, bss::error& error_)
     {
+        std::string result_string = "";
+        http::response<http::string_body> response;
         json_loh payload = {{"market", market}};
-        auto response = http_client.delete_("orders", payload.dump());
-        //return json_loh::parse(response.body());
-        return response.body();
+        try {
+            response = http_client.delete_("orders", payload.dump());
+            simdjson::dom::parser parser;
+            auto &&error_code = parser.allocate(0x1000,0x04);
+            if(simdjson::SUCCESS == error_code) {
+                auto result = parser.parse(response.body().c_str(), response.body().size(), false);
+                if(simdjson::SUCCESS == result.error()) {
+                    auto element_success{result["success"].get_bool()};
+                    // если success == true, то вернем результат
+                    if(element_success.value() == true) {
+                        result_string = result["result"].get_c_str();
+                    } else {
+                        error_.describe(fmt::format("json фрейм содержит \"result\" со значением false. (json body: {}).",
+                                                    response.body().c_str()));
+                        result_string = result["error"].get_c_str();
+                    }
+                } else {
+                    error_.describe(fmt::format("Ошибка разбора json фрейма. (json body: {}).",
+                                                response.body().c_str()));
+                }
+            } else {
+                error_.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). (json body: {}).",
+                                            response.body().c_str()));
+            }
+        }
+        catch(simdjson::simdjson_error& err){
+            error_.describe(err.what() + fmt::format("(json body: {}).", response.body().c_str()));
+        }
+        catch(std::exception& ex){
+            error_.describe(fmt::format("error в rest private channel: {}", ex.what()));
+        }
+        return result_string;
     }
     std::string RESTClient::cancel_order(const std::string& order_id, bss::error& error_)
     {
@@ -314,9 +345,9 @@ namespace ftx {
         std::cout<<response.body()<<std::endl;
         return json_loh::parse(response.body());
     }*/
-    std::vector<SBState> RESTClient::get_balances(/*std::string*/bss::error& error_)
+    std::vector<s_balances_state> RESTClient::get_balances(/*std::string*/bss::error& error_)
     {
-        std::vector<SBState> balancesVector;
+        std::vector<s_balances_state> balancesVector;
         http::response<http::string_body> response;
         try
         {
@@ -339,7 +370,7 @@ namespace ftx {
                             //std::cout<<arr<<std::endl;
                             for(simdjson::dom::object obj:arr)
                             {
-                                SBState balanceState;
+                                s_balances_state balanceState;
                                 //std::cout<<obj["coin"]<<" "<<obj["free"]<< " "<<obj["total"]<< ""<< obj["usdValue"]<<std::endl;
                                 balanceState.coin     = obj["coin"].value();
                                 balanceState.free     = obj["free"].value();

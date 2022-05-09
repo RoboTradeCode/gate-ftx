@@ -1,7 +1,6 @@
 #include "gateway.hpp"
-//#include "src/spdlog/spdlog.h"
 
-namespace pt = boost::property_tree;
+
 using namespace aeron::util;
 using namespace aeron;
 
@@ -9,133 +8,62 @@ namespace ftx {
 
 gateway::gateway(const std::string& config_file_path_)
  : _general_logger(spdlog::get("general")),
-   _ping_pong_logger(spdlog::get("pingpong")),
-   _orderbook_logger(spdlog::get("orderbooks")),
+   _logs_logger(spdlog::get("logs")),
+   //_orderbook_logger(spdlog::get("orderbooks")),
    _balances_logger(spdlog::get("balances")),
    _errors_logger(spdlog::get("errors"))
 {
     // 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
-    // установим имя файла, при появлении которого необходимо отправить баланс
-    _path = "balance";
-
     _general_logger->info("Starting...");
-    // получаем дефолтную конфигурацию конфигурацию
+    // получаем дефолтную конфигурацию
     _default_config = parse_config(config_file_path_);
     bss::error error;
     // создаём канал агента
-    if (!create_agent_channel(error)) {
-        error.describe("Ошибка создание канала получения конфигурации.");
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << error.to_string();
+    if (!create_aeron_agent_channels(error)) {
+        error.describe("Ошибка создание каналов aeron агента для получения конфигурации.");
         _general_logger->error(error.to_string());
         error.clear();
     } else {}
- /*   get_full_config_request();*/
-
-    //---- for test ----
-    /*simdjson::padded_string s = simdjson::padded_string::load("config.json");
-    uint64_t start1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    for(int i =0; i< 100; ++i)
-        //test_dom(s, error);
-        test_ondemand(s, error);
-    uint64_t stop1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    std::cout << stop1-start1 << std::endl;
-
-    uint64_t start2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    for(int i =0; i< 100; ++i)
-        //test_ondemand(s, error);
-        test_dom(s, error);
-    uint64_t stop2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    std::cout << stop2-start2 << std::endl;*/
-    //------------------
-  /*  load_config(error);
-    // запоминаем время для отправки пинга
-    _last_ping_time = std::chrono::system_clock::now();
-    // создаём каналы aeron, websocket и rest
-    create_aeron_channel();
-    create_private_REST();
-    create_private_ws();
-    create_public_ws();
-
-    // проверяем и отправляем баланс
-    check_balance();*/
-    // получаем характеристики валютной пары
-/*    curr_characters = ftx_rest_private->list_markets("BTC/USDT", _error);
-    if(_error){
-        _error.describe("Ошибка получения характеристик валютной пары (list_markets)");
-        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-        _error.clear();
-    }
-
-    get_precision(curr_characters);
-
-    // получаем открытые ордера
-    std::vector<SOrder> orders_vector = ftx_rest_private->get_open_orders("BTC/USDT", _error);
-    if(orders_vector.size() != 0)
-    {
-        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "есть открытые ордера";
-        // отправляем ордера в ядро
-        order_sender(orders_vector);
-        // и потом отменяем их
-        std::string cancel_result = ftx_rest_private->cancel_all_orders("BTC/USDT");
-        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << cancel_result;
-    }
-    else
-    {
-        if(_error){
-            _error.describe("Ошибка получения информации об открытых оредерах (get_open_orders).");
-            BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << _error.to_string();
-            _error.clear();
-        }
-        else{
-            BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "Нет открытых ордеров.";
-        }
-    }*/
 }
 //--------------------------------------------------------
 //
 //--------------------------------------------------------
-bool gateway::preparation_for_launch()
-{
+bool gateway::preparation_for_launch() {
     _error.clear();
     // запоминаем время для отправки пинга
     _last_ping_time = std::chrono::system_clock::now();
     // создаём каналы aeron, websocket и rest
-    if (create_aeron_channel()) {
-        create_private_REST();
-        create_private_ws();
-        create_public_ws();
-
-        // проверяем и отправляем баланс
-        /*check_balance();
-        // получаем открытые ордера по всем рынкам и отменяем их
-        for (auto market : _work_config._markets) {
-            std::vector<SOrder> orders_vector = _ftx_rest_private->get_open_orders(market, _error);
-            if(orders_vector.size() != 0) {
-                _general_logger->info("Есть открытые ордера");
-                // отправляем ордера в ядро
-                order_sender(orders_vector);
-                std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market);
-                _general_logger->info("Результат отмены ордеров по рынку {}: {}", market, cancel_all_order_result);
-            } else {
-                if (_error) {
-                    _error.describe("Ошибка получения информации об открытых ордерах при запуске шлюза.");
+    if (create_aeron_core_channels(_error)) {
+        if (create_private_REST(_error)) {
+            if (create_private_ws(_error)) {
+                if (create_public_ws(_error)) {
+                    return true;
+                } else {
                     _general_logger->error(_error.to_string());
                     _error.clear();
-                } else {
-                    _general_logger->info("Нет открытых ордеров.");
+                    return false;
                 }
+            } else {
+                _general_logger->error(_error.to_string());
+                _error.clear();
+                return false;
             }
-        }*/
-        return true;
+        } else {
+            _general_logger->error(_error.to_string());
+            _error.clear();
+            return false;
+        }
+
     } else {
+        _general_logger->error(_error.to_string());
+        _error.clear();
         return false;
     }
 }
 //--------------------------------------------------------
 // создаёт канал для приёма конфига от агента
 //--------------------------------------------------------
-bool gateway::create_agent_channel(bss::error& error_)
-{
+bool gateway::create_aeron_agent_channels(bss::error& error_) {
     bool result = true;
     bss::error error;
     try {
@@ -144,33 +72,35 @@ bool gateway::create_agent_channel(bss::error& error_)
         {shared_from_this()->config_from_agent_handler(message);},
                     _default_config.aeron_agent.subscribers.agent.channel,
                     _default_config.aeron_agent.subscribers.agent.stream_id);
-
+    } catch (std::exception& err) {
+        // добавляем описание ошибки
+        error_.describe(fmt::format("Канал для получения конфига от агента не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         // установка соединения с каналом aeron, в котором будем запрашивать полный конфиг
         _publisher_agent_channel = std::make_shared<Publisher>(_default_config.aeron_agent.publishers.agent.channel,
                                                               _default_config.aeron_agent.publishers.agent.stream_id);
+    } catch (std::exception& err) {
+        // добавляем описание ошибки
+        error_.describe(fmt::format("Канал для запроса на получение конфига не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         // установка соединения с каналом aeron, в который будем посылать логи работы
         _publisher_logs_channel  = std::make_shared<Publisher>(_default_config.aeron_agent.publishers.logs.channel,
                                                               _default_config.aeron_agent.publishers.logs.stream_id);
     } catch (std::exception& err) {
         // добавляем описание ошибки
-        error_.describe(err.what());
-        return false;
+        error_.describe(fmt::format("Канал для отправки логов агенту не создан: {}", err.what()));
+        result = false;
     }
-
-    /*if (load_config(error); not error) {
-        std::cout << "Конфигурация прочитана" << std::endl;
-    } else {
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << error.to_string();
-        _general_logger->error(error.to_string());
-        error.clear();
-    }*/
     return result;
 }
 //---------------------------------------------------------------
 // загружает конфиг из файла
 //---------------------------------------------------------------
-bool gateway::load_config(bss::error& error_) noexcept
-{
+bool gateway::load_config(bss::error& error_) noexcept {
     // создаем парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
@@ -312,22 +242,42 @@ bool gateway::load_config(bss::error& error_) noexcept
 //---------------------------------------------------------------
 //
 //---------------------------------------------------------------
-bool gateway::create_aeron_channel()
+bool gateway::create_aeron_core_channels(bss::error& error_)
 {
     bool result = true;
-    try{
+    try {
         // установка соединений с каналом aeron
         _balance_channel      = std::make_shared<Publisher>(_work_config.aeron_core.publishers.balance.channel,      _work_config.aeron_core.publishers.balance.stream_id);
+    } catch (const std::exception& err) {
+        // добавляем описание ошибки
+        error_.describe(fmt::format("Канал для отправки балансов не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         _orderbook_channel    = std::make_shared<Publisher>(_work_config.aeron_core.publishers.orderbook.channel,    _work_config.aeron_core.publishers.orderbook.stream_id);
+    } catch (const std::exception& err) {
+        // добавим описание ошибки
+        error_.describe(fmt::format("Канал для отправки ордербуков не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         _log_channel          = std::make_shared<Publisher>(_work_config.aeron_core.publishers.logs.channel,         _work_config.aeron_core.publishers.logs.stream_id);
+    } catch (const std::exception& err) {
+        error_.describe(fmt::format("Канал для отправки логов не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         _order_status_channel = std::make_shared<Publisher>(_work_config.aeron_core.publishers.order_status.channel, _work_config.aeron_core.publishers.order_status.stream_id);
+    }  catch (const std::exception& err) {
+        error_.describe(fmt::format("Канал для отправки статуса ордеров не создан: {}", err.what()));
+        result = false;
+    }
+    try {
         _core_channel         = std::make_shared<Subscriber>([&](std::string_view message)
                 {shared_from_this()->aeron_handler(message);},
                 _work_config.aeron_core.subscribers.core.channel, _work_config.aeron_core.subscribers.core.stream_id);
-    }
-    catch(std::exception& err){
-        //std::cout << err.what() << std::endl;
-        _general_logger->info("Ошибка при создании одного из канала aeron: {}", err.what());
+    } catch (const std::exception& err) {
+        error_.describe(fmt::format("Канал для приёма команд не создан: {}", err.what()));
         result = false;
     }
     return result;
@@ -335,96 +285,81 @@ bool gateway::create_aeron_channel()
 //---------------------------------------------------------------
 // создаёт публичный WS
 //---------------------------------------------------------------
-void gateway::create_public_ws()
-{
-    _ftx_ws_public    = std::make_shared<ftx::WSClient>("",
-                                                        "",
-                                                        ioc,
-                                                        [&](std::string_view message_, void* id_)
-                            {shared_from_this()->public_ws_handler(message_, id_);},
-                                                        _errors_logger);
-    // подписываемся на публичный поток ticker
-    //ftx_ws_public->subscribe_ticker("BTC/USDT");
-    //ftx_ws_public->subscribe_ticker("ETH/USDT");
-    // подписываемся на канал ордербуков
-    //size_t szt = _ftx_ws_public->subscribe_orderbook("BTC/USDT");
-    //_general_logger->info("Подписываемся на BTC/USDT. Результат: {}", szt);
-    //ftx_ws_public->subscribe_orderbook("ETH/USDT");
-    // подписываемся на канал ордербуков
-    for (auto market : _work_config._markets) {
-        size_t szt = _ftx_ws_public->subscribe_orderbook(market);
-        _general_logger->info("Подписываемся на {}. Результат: {}", market, szt);
+bool gateway::create_public_ws(bss::error& error_) {
+    try {
+        _ftx_ws_public    = std::make_shared<ftx::WSClient>("",
+                                                            "",
+                                                            _ioc,
+                                                            [&](std::string_view message_, void* id_)
+                                {shared_from_this()->public_ws_handler(message_, id_);},
+                                                            _errors_logger);
+        //ftx_ws_public->subscribe_orderbook("ETH/USDT");
+        // подписываемся на канал ордербуков
+        for (auto market : _work_config._markets) {
+            size_t szt = _ftx_ws_public->subscribe_orderbook(market);
+            _general_logger->info("Подписываемся на {} в публичном канале. Результат: {}", market, szt);
+        }
+        return true;
+    } catch (const std::exception& err) {
+        error_.describe(fmt::format("Ошибка создания публичного WebSocket канала: {}", err.what()));
+        return false;
     }
 }
 //---------------------------------------------------------------
 // создаёт приватный WS
 //---------------------------------------------------------------
-void gateway::create_private_ws()
-{
-    _ftx_ws_private   = std::make_shared<ftx::WSClient>(_work_config.account.api_key,
-                                                        _work_config.account.secret_key,
-                                                        ioc,
-                                                        [&](std::string_view message_, void* id_)
-                            {shared_from_this()->private_ws_handler(message_, id_);},
-                                                        _errors_logger);
-    // авторизуемся в приватном ws
-    std::string error;
-    // количество попыток
-    int try_count = 0;
-    // флаг успешного подключения
-    bool loggon = false;
-    //ftx_ws_private->login(error);
-    while(true){
-        // пытаемся логиниться
+bool gateway::create_private_ws(bss::error& error_) {
+    try {
+        _ftx_ws_private   = std::make_shared<ftx::WSClient>(_work_config.account.api_key,
+                                                            _work_config.account.secret_key,
+                                                            _ioc,
+                                                            [&](std::string_view message_, void* id_)
+                                {shared_from_this()->private_ws_handler(message_, id_);},
+                                                            _errors_logger);
+        // авторизуемся в приватном ws
+        std::string error;
+        // количество попыток
+        int try_count = 0;
         size_t login_result = _ftx_ws_private->login(error);
-        if(login_result != 0){
-            // успешно залогинились
-            loggon = true;
-            //_general_logger->info("loggon true, try count = {}", try_count);
-            // выходим
-            break;
+        if(!login_result){
+            _general_logger->error("Ending...");
+            exit(0);
         }
-        else{
-            // пытаемся еще залогиниться
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "loggon false " << "try count = " << try_count;
-            _general_logger->error("loggon false, try count = {}", try_count);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            ++try_count;
-            if(try_count == 3)
-                break;
+        // подписываемся на приватный поток order
+        for (auto market : _work_config._markets) {
+            size_t szt = _ftx_ws_private->subscribe_order(market);
+            _general_logger->info("Подписались на {} в приватном WS канале. Результат: {}", market, szt);
         }
+        return true;
+    } catch (const std::exception& err) {
+        error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
+        return false;
     }
-    if(!loggon){
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "Ending...";
-        _general_logger->error("Ending...");
-        exit(0);
-    }
-    // подписываемся на приватный поток order
-    _ftx_ws_private->subscribe_order("BTC/USDT");
-    //size_t subscribe_result = ftx_ws_private->subscribe_order("BTC/USDT");
-    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "subscribe_order with result: " << subscribe_result;
-
 }
 //---------------------------------------------------------------
 // создаёт приватный REST
 //---------------------------------------------------------------
-void gateway::create_private_REST()
-{
+bool gateway::create_private_REST(bss::error& error_) {
     _ftx_rest_private = std::make_shared<ftx::RESTClient>(_work_config.account.api_key,
                                                           _work_config.account.secret_key);
+    if (!_ftx_rest_private) {
+        error_.describe("Ошибка создания приватного REST канала");
+        return false;
+    } else {
+        return true;
+    }
+
 }
-void gateway::pool()
-{
+void gateway::pool() {
     _core_channel->poll();
-   // _subscriber_agent_channel->poll();
-    ioc.run_for(std::chrono::microseconds(100));
-    // каждые 15 секунд будем дёргать приватный REST
-    /*if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - _last_ping_time) > 15s){
+    _ioc.run_for(std::chrono::microseconds(100));
+    // каждые 15 секунд будем дёргать приватный WS и общественный WS
+    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - _last_ping_time) > 15s) {
         size_t ping_result = _ftx_ws_private->ping();
-        //BOOST_LOG_SEV(ping_pong_logger, logging::trivial::info) << "ping with result: " << ping_result;
+        ping_result = _ftx_ws_public->ping();
         _last_ping_time = std::chrono::system_clock::now();
         // если 5 минут не было ничего кроме понга в приватном канале, то нам надо перегрузить канал
-        if(ws_control >= 20){
+        /*if(ws_control >= 20){
             // перезапускаем приватный WS по-таймауту
             //restart_private_ws("by timeout");
 
@@ -437,19 +372,16 @@ void gateway::pool()
             _general_logger->info("send balance by demand.");
             // удалим файл
             std::filesystem::remove(_path);
-        }
-    }*/
+        }*/
+    }
 }
-void gateway::pool_from_agent()
-{
+void gateway::pool_from_agent() {
     _subscriber_agent_channel->poll();
-    //ioc.run_for(std::chrono::microseconds(100));
 }
 //---------------------------------------------------------------
 // принимает конфиг от агента
 //---------------------------------------------------------------
-void gateway::config_from_agent_handler(std::string_view message_)
-{
+void gateway::config_from_agent_handler(std::string_view message_) {
     // это временная мера
     if (_config_was_received == true)
         return;
@@ -589,8 +521,7 @@ void gateway::config_from_agent_handler(std::string_view message_)
 //---------------------------------------------------------------
 // обрабатывает сообщения от ядра
 //---------------------------------------------------------------
-void gateway::aeron_handler(std::string_view message_)
-{
+void gateway::aeron_handler(std::string_view message_) {
     _error.clear();
     _general_logger->info("***************************************");
     _general_logger->info("(message from core): {}", message_);
@@ -642,32 +573,30 @@ void gateway::aeron_handler(std::string_view message_)
                                             order_id = order_id_element.value();
                                         }
                                         // выставлен ордер на отмену продажи
-                                        if (action.compare("cancel_order") == 0 /*&& side.compare("sell") == 0*/) {
-                                            //cancel_sell_order(order_id);
+                                        if (action.compare("cancel_order") == 0) {
                                             cancel_order(order_id);
-                                         }
-                                        // выставлен ордер на продажу
-                                        /*else if (action.compare("create_order") == 0 && side.compare("sell") == 0) {
-                                            sell_order(symbol, price, amount);
-                                        }*/
-                                        // выставлен ордер на отмену покупки
-                                        /*else if (action.compare("cancel_order") == 0 && side.compare("buy") == 0) {
-                                            cancel_buy_order(order_id);
-                                        }*/
+                                        }
                                         // выставлен ордер на покупку
-                                        else if (action.compare("create_order") == 0 /*&& side.compare("buy") == 0*/) {
-                                            //buy_order(symbol, price, amount);
+                                        else if (action.compare("create_order") == 0) {
                                             create_order(side, symbol, price, amount);
-                                        } else if (action.compare("get_balances")){
+                                        } else if (action.compare("get_balances") == 0){
                                             check_balances();
+                                        } else if (action.compare("cancel_all_orders") == 0) {
+                                            cancel_all_orders();
                                         } else {
                                             //_error.describe("Не могу распознать action и side в команде от ядра {}.", message_);
                                             _general_logger->error("Не могу распознать action и side в команде от ядра {}.", message_.data());
                                         }
                                     }
                                 } else {
-                                    //_error.describe(fmt::format("Не могу получить массив данных data {}.", message_.data()));
-                                    _general_logger->error("Не могу получить массив данных data {}.", message_.data());
+                                    if (action.compare("get_balances") == 0) {
+                                        check_balances();
+                                    } else if (action.compare("cancel_all_orders") == 0) {
+                                        cancel_all_orders();
+                                    } else {
+                                        //_error.describe(fmt::format("Не могу получить массив данных data {}.", message_.data()));
+                                        _general_logger->error("Не могу получить массив данных data {}.", message_.data());
+                                    }
                                 }
                             } else {
                                 //_error.describe(fmt::format("В команде неверно указана биржа: {}.", message_.data()));
@@ -697,8 +626,7 @@ void gateway::aeron_handler(std::string_view message_)
             //_error.clear();
         }
     }
-    catch(simdjson::simdjson_error& err)
-    {
+    catch(simdjson::simdjson_error& err) {
         //_error.describe(err.what() + fmt::format(" (json body: {}).", message_));
         std::string error_description = err.what() + fmt::format(" (json body: {}).", message_);
         _general_logger->error(error_description);
@@ -707,171 +635,11 @@ void gateway::aeron_handler(std::string_view message_)
     //std::cout << "------------------------------------------------------------------------------------------------" << std::endl;
     std::cout << "" << std::endl;
 }
-/*void gateway::aeron_handler(std::string_view message_)
-{
-    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "(message from core): " << message_;
-    _general_logger->info("(message from core): {}", message_);
-    try
-    {
-        simdjson::dom::parser parser;
-        auto &&error_code = parser.allocate(0x1000,0x04);
-        if(simdjson::SUCCESS == error_code)
-        {
-            auto result = parser.parse(message_.data(), message_.size(), false);
-            if(simdjson::SUCCESS == result.error())
-            {
-                std::string_view a, S, s, t, p, q;
-                a = result.at_key("a").get_string();
-                S = result.at_key("S").get_string();
-                s = result.at_key("s").get_string();
-                if(a.compare("+") == 0)
-                {
-                    t = result.at_key("t").get_string();
-                    p = result.at_key("p").get_string();
-                    q = result.at_key("q").get_string();
-                }
-                // выставлен ордер на отмену продажи
-                if(a.compare("-") == 0  && s.compare("SELL") == 0)
-                {
-                    cancel_sell_order();
-                }
-                // выставлен ордер на продажу
-                else if(a.compare("+") == 0  && s.compare("SELL") == 0)
-                {
-                    sell_order(p, q);
-                }
-                // выставлен ордер на отмену покупки
-                else if(a.compare("-") == 0  && s.compare("BUY") == 0)
-                {
-                    cancel_buy_order();
-                }
-                // выставлен ордер на покупку
-                else if(a.compare("+") == 0  && s.compare("BUY") == 0)
-                {
-                    buy_order(p, q);
-                }
-            }
-            else
-            {
-                _error.describe("Ошибка разбора json фрейма.");
-                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                _general_logger->error(_error.to_string());
-                _error.clear();
-            }
-        }
-        else
-        {
-            _error.describe("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)).");
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-            _general_logger->error(_error.to_string());
-            _error.clear();
-        }
-    }
-    catch(simdjson::simdjson_error& err)
-    {
-        _error.describe(err.what() + fmt::format(" (json body: {}).", message_));
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-        _general_logger->error(_error.to_string());
-        _error.clear();
-    }
-    std::cout << "------------------------------------------------------------------------------------------------" << std::endl;
-}*/
 //---------------------------------------------------------------
-// обрабатывает отмену ордера на продажу ("-" && "sell")
+// отменяет ордер по id
 //---------------------------------------------------------------
-/*void gateway::cancel_sell_order(const int64_t& order_id)
-{
-    _general_logger->info("Ядром выставлен ордер на отмену продажи, проверим открытые ордера.");
-    // получаем открытые ордера
-    _error.clear();
-    std::vector<SOrder> open_orders_list = _ftx_rest_private->get_open_orders("BTC/USDT", _error);
-    if(open_orders_list.size() != 0) {
-        // ордера есть, проверим какие
-        for (auto &&order : open_orders_list) {
-            // есть открытый ордер на продажу
-            if(order.side == "sell") {
-                _general_logger->info("Есть открытый ордер на продажу {} {}", open_orders_list.at(0).clientId, _error.to_string());
-                // отменяем ордер по идентификатору
-                std::string cancel_order_result = _ftx_rest_private->cancel_order(std::to_string(order.id), _error);
-                if(_error) {
-                    _error.describe("Ошибка отмены ордера");
-                    _general_logger->error("Результат отмены ордера (id): {} {} {}", order.id, cancel_order_result, _error.to_string());
-                    order_status_prepare("order_cancel", "Order was cancel", cancel_order_result, true, _error.to_string());
-                    _error.clear();
-                } else {
-                    _general_logger->info("Результат отмены ордера (id): {} {}", order.id, cancel_order_result);
-                    order_status_prepare("order_cancel", "Order was cancel", cancel_order_result);
-                }
-            } else if (order.side == "buy") {
-                _general_logger->info("Есть открытый ордер, но на покупку.");
-            }
-        }
-    } else {
-        if(_error) {
-            _error.describe("Ошибка получения информации об открытых ордерах (get_open_orders)");
-            _general_logger->error(_error.to_string());
-            _error.clear();
-            // если была какая-то ошибка при получении списка ордеров, то выходим из функции
-            // дальнейшие действия чреваты
-            // перед выходом проверяем и отправляем баланс
-            check_balance();
-            return;
-        } else {
-            _general_logger->info("Нет выставленных ордеров на продажу (отменять нечего).");
-        }
-    }
-}*/
-//---------------------------------------------------------------
-// обрабатывает отмену ордера на покупку ("-" && "buy")
-//---------------------------------------------------------------
-/*void gateway::cancel_buy_order(const int64_t& order_id)
-{
-    _general_logger->info("Ядром выставлен ордер на отмену покупки, проверим открытые ордера.");
-    // получаем открытые ордера
-    _error.clear();
-    std::vector<SOrder> open_orders_list = _ftx_rest_private->get_open_orders("BTC/USDT", _error);
-    if(open_orders_list.size() != 0) {
-        // ордера есть, проверим какие
-        for (auto &&order : open_orders_list) {
-            // есть открытый ордер на покупку
-            if(order.side == "buy") {
-                _general_logger->info("Есть открытый ордер на покупку {} {}.", open_orders_list.at(0).clientId, _error.to_string());
-                // отменяем ордер по идентификатору
-                std::string cancel_order_result = _ftx_rest_private->cancel_order(std::to_string(order.id), _error);
-                if(_error) {
-                    _error.describe("Ошибка отмены ордера");
-                    _general_logger->error("Результат отмены ордера (id): {} {} {}", order.id, cancel_order_result, _error.to_string());
-                    order_status_prepare("order_cancel", "Order was cancel", cancel_order_result, true, _error.to_string());
-                    _error.clear();
-                } else {
-                    _general_logger->info("Результат отмены ордера (id): {} {}", order.id, cancel_order_result);
-                    order_status_prepare("order_cancel", "Order was cancel", cancel_order_result, true, _error.to_string());
-                }
-            } else if (order.side == "sell") {
-                _general_logger->info("Есть открытый ордер, но на продажу.");
-            }
-        }
-    } else {
-        if(_error) {
-            _error.describe("Ошибка получения информации об открытых ордерах (get_open_orders)");
-            _general_logger->error(_error.to_string());
-            _error.clear();
-            // если была какая-то ошибка при получении списка ордеров, то выходим из функции
-            // дальнейшие действия чреваты
-            // перед выходом проверяем и отправляем баланс
-            check_balance();
-            return;
-        } else {
-            _general_logger->info("Нет выставленных ордеров на покупку (отменять нечего).");
-        }
-    }
-}*/
-//---------------------------------------------------------------
-// обрабатывает отмену ордера по id
-//---------------------------------------------------------------
-void gateway::cancel_order(const int64_t &order_id)
-{
-    _general_logger->info("Ядром выставлен ордер на отмену: order_id = {}.", order_id);
+void gateway::cancel_order(const int64_t &order_id) {
+    _general_logger->info("Получена команда на отмену ордера: order_id = {}.", order_id);
     _error.clear();
     std::string cancel_order_result = _ftx_rest_private->cancel_order(std::to_string(order_id), _error);
     if(_error) {
@@ -885,143 +653,28 @@ void gateway::cancel_order(const int64_t &order_id)
     }
 }
 //---------------------------------------------------------------
-// обрабатывает ордер на продажу ("+" && "sell")
+// отменяет все ордера
 //---------------------------------------------------------------
-//void gateway::sell_order(std::string_view price_, std::string_view quantity_)
-/*void gateway::sell_order(const std::string& symbol, const double& price_, const double& quantity_)
-{
-    _general_logger->info("Ядром выставлен ордер на продажу, проверим открытые ордера.");
+void gateway::cancel_all_orders() {
+    _general_logger->info("Получена команда на отмену всех ордеров");
     _error.clear();
-    // получаем открытые ордера
-    std::vector<SOrder> open_orders_list = _ftx_rest_private->get_open_orders("BTC/USDT", _error);
-    if(open_orders_list.size() != 0) {
-        // ордера есть, проверим какие
-        for (auto &&order : open_orders_list) {
-            // есть открытый ордер на продажу
-            if (order.side == "sell") {
-                //_general_logger->info("Есть открытый ордер на продажу {} {}.", open_orders_list.at(0).clientId, _error.to_string());
-                _general_logger->info("Есть открытый ордер на продажу: {} {}.", order.id, _error.to_string());
-                // отменяем ордер по идентификатору
-                std::string result = _ftx_rest_private->cancel_order(std::to_string(order.id), _error);
-                if (_error) {
-                    _error.describe("Ошибка отмены ордера");
-                    _general_logger->error("Результат отмены ордера (id): {} {} {}.", order.id, result, _error.to_string());
-                    _error.clear();
-                } else {
-                    _general_logger->info("Результат отмены ордера (id): {} {}.", order.id, result);
-                }
-            } else if(order.side == "buy") {
-                _general_logger->info("Есть открытый ордер, но на покупку.");
-            }
-        }
-    } else {
-        if(_error) {
-            _error.describe("Ошибка получения информации об открытых ордерах (get_open_orders)");
-            _general_logger->error(_error.to_string());
-            _error.clear();
-            // если была какая-то ошибка при получении списка ордеров, то выходим из функции
-            // дальнейшие действия чреваты
-            // перед выходом проверяем и отправляем баланс
-            check_balance();
-            return;
-        } else {
-            _general_logger->info("Нет выставленных ордеров на продажу (отменять нечего).");
-        }
-    }
-    _general_logger->info("Выставлен ордер на продажу с ценой: {} и объёмом {}", price_, quantity_);
-//    std::string price = set_price_precision(std::string(price_));
-//    std::string size  = set_size_precision(std::string(quantity_));
-//    _general_logger->info("После корректировки: {} {}", price, size);
-
-    // выставляем ордер (синхронно)
-    std::string place_order_result = _ftx_rest_private->place_order(symbol, "sell", price_, quantity_, _error);
-    if(_error) {
-        _error.describe("Ошибка выставления ордера.");
-        _general_logger->error("Ошибка выставления ордера на продажу: {} {}", place_order_result, _error.to_string());
-        order_status_prepare("order_created", "Order was created", place_order_result, true, _error.to_string());
-        _error.clear();
-    } else {
-        _general_logger->info("Результат выставления ордера на продажу: {}", place_order_result);
-        order_status_prepare("order_created", "Order was created", place_order_result);
-    }
-
-//    std::make_shared<ftx::AsyncRESTClient>(config.account.api_key,
-//                                           config.account.secret_key,
-//                                           ioc,
-//                                           [&](std::string_view message_)
-//             {shared_from_this()->place_order_result_handler(message_);})->place_order("BTC/USDT", "sell", price, size);
-}*/
-//---------------------------------------------------------------
-// обрабатывает ордер на покупку ("+" && "buy")
-//---------------------------------------------------------------
-//void gateway::buy_order(std::string_view price_, std::string_view quantity_)
-/*void gateway::buy_order(const std::string& symbol, const double& price_, const double& quantity_)
-{
-    _general_logger->info("Ядром выставлен ордер на покупку, проверим открытые ордера.");
-    // получаем открытые ордера
-    _error.clear();
-    std::vector<SOrder> open_orders_list = _ftx_rest_private->get_open_orders("BTC/USDT", _error);
-    if(open_orders_list.size() != 0) {
-        // ордера есть, проверим какие
-        for (auto &&order : open_orders_list) {
-            // есть открытый ордер на продажу
-            if(order.side == "buy")
-            {
-                //_general_logger->info("Есть открытый ордер на покупку {} {}", open_orders_list.at(0).clientId, _error.to_string());
-                _general_logger->info("Есть открытый ордер на покупку: {} {}", order.id, _error.to_string());
-                // отменяем ордер по идентификатору
-                std::string result = _ftx_rest_private->cancel_order(std::to_string(order.id), _error);
-                if(_error) {
-                    _error.describe("Ошибка отмены ордера");
-                    _general_logger->error("Результат отмены ордера (id): {} {} {}", order.id, result, _error.to_string());
-                    _error.clear();
-                } else {
-                    _general_logger->info("Результат отмены ордера (id): {} {}", order.id, result);
-                }
-            } else if(order.side == "sell") {
-                 _general_logger->info("Есть открытый ордер, но на покупку.");
-            }
-        }
-    } else {
+    for (auto market : _work_config._markets) {
+        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
         if (_error) {
-            _error.describe("Ошибка получения информации об открытых ордерах (get_open_orders)");
-            _general_logger->error(_error.to_string());
+            _error.describe(fmt::format("Ошибка отмены ордеров для {}", market));
+            _general_logger->error("Результат отмены всех ордеров: {}, ошибка: {}", cancel_all_order_result, _error.to_string());
+            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result, true, _error.to_string());
             _error.clear();
-            // если была какая-то ошибка при получении списка ордеров, то выходим из функции
-            // дальнейшие действия чреваты
-            // перед выходом проверяем и отправляем баланс
-            check_balance();
-            return;
         } else {
-            _general_logger->info("Нет выставленных ордеров на покупку (отменять нечего).");
+            _general_logger->info("Результат отмены всех ордеров для {} {}", market, cancel_all_order_result);
+            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result);
         }
     }
-    _general_logger->info("Выставлен ордер на покупку с ценой: {} и объёмом {}", price_, quantity_);
-//    std::string price = set_price_precision(std::string(price_));
-//    std::string size  = set_size_precision(std::string(quantity_));
-//    _general_logger->info("После корректировки: {} {}", price, size);
-
-    // выставляем ордер (синхронно)
-    std::string place_order_result = _ftx_rest_private->place_order(symbol, "buy", price_, quantity_, _error);
-    if(_error) {
-        _general_logger->error("Ошибка выставления ордера на покупку: {} {}", place_order_result, _error.to_string());
-        order_status_prepare("order_created", "Order was created", place_order_result, true, _error.to_string());
-        _error.clear();
-    } else {
-        _general_logger->info("Результат выставления ордера на покупку: {}", place_order_result);
-        order_status_prepare("order_created", "Order was created", place_order_result);
-    }
-//    std::make_shared<ftx::AsyncRESTClient>(config.account.api_key,
-//                                           config.account.secret_key,
-//                                           ioc,
-//                                           [&](std::string_view message_)
-//             {shared_from_this()->place_order_result_handler(message_);})->place_order("BTC/USDT", "buy", price, size);
-}*/
+}
 //---------------------------------------------------------------
 // обрабатывает команду на создания ордера
 //---------------------------------------------------------------
-void gateway::create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_)
-{
+void gateway::create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_) {
     _error.clear();
     if (side_.compare("buy") == 0) {
         _general_logger->info("Ядром выставлен ордер на покупку {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
@@ -1063,8 +716,7 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
 //---------------------------------------------------------------
 // подготавливаем json order_status
 //---------------------------------------------------------------
-void gateway::order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result, bool is_error, std::string error_)
-{
+void gateway::order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result, bool is_error, std::string error_) {
     std::string_view event{"data"};
     std::string_view id;
     std::string_view status;
@@ -1119,7 +771,7 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
                         event    = "error";
                         //action_  = "order_not_created";
                         message_ = element_error.value();
-                    }
+                    } else {}
                 }
             }
         }
@@ -1155,144 +807,91 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
     order_status_sender(order_status_root.dump());
 }
 //---------------------------------------------------------------
-// отправляем order_status
+// отправляет order_status
 //---------------------------------------------------------------
-void gateway::order_status_sender(std::string_view order_status_)
-{
-
+void gateway::order_status_sender(std::string_view order_status_) {
     std::int64_t result = _order_status_channel->offer(order_status_.data());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации о статусе ордера в ядро: ", result);
+    if (result < 0) {
+        processing_error("error: Ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
+    } else {
+        _prev_order_status_message_core = fmt::format("Результат: {}. Сообщение: {}", result, order_status_.data());
     }
     // теперь отравим все это дело в лог
     result = _log_channel->offer(order_status_.data());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации о статусе ордера в лог: ", result);
+    if (result < 0) {
+        processing_error("error: Ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
+    } else {
+        _logs_logger->info(order_status_.data());
+        _prev_order_status_message_log = fmt::format("Результат: {}. Сообщение: {}", result, order_status_.data());
     }
 }
 //---------------------------------------------------------------
 // приватный канал WS (neew refactoring, обработка ошибок и отмена try catch)
 //---------------------------------------------------------------
-void gateway::private_ws_handler(std::string_view message_, void* id_)
-{
+void gateway::private_ws_handler(std::string_view message_, void* id_) {
     //return;
-    if(message_.compare("{\"type\": \"pong\"}") == 0){
+    if (message_.compare("{\"type\": \"pong\"}") == 0) {
         // ответ должны получать каждые 30 секунд, увеличим счётчик
-        if(start_trigger == true)
+        /*if(start_trigger == true)
             ++ws_control;
-//        BOOST_LOG_SEV(ping_pong_logger, logging::trivial::info) << "pong: "            << message_      <<
-//                                                                   " start_trigger = " << start_trigger <<
-//                                                                   " ws_control = "    << ws_control    <<
-//                                                                   " object_id = "     << id_;
-        _ping_pong_logger->info("pong: {} start_trigger = {} ws_control = {} object_id = {}", message_, start_trigger, ws_control, id_);
+        _ping_pong_logger->info("pong: {} start_trigger = {} ws_control = {} object_id = {}", message_, start_trigger, ws_control, id_);*/
         return;
-    }
-    try
-    {
-        std::cout << "" << message_ << std::endl;
+    } else {}
+    try {
+        //std::cout << "" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
         // пусть парсер подготовит буфер для своих нужд
         auto &&error_code = parser.allocate(0x1000,0x04);
         // если буфер был успешно выделен
-        if(simdjson::SUCCESS == error_code){
+        if (simdjson::SUCCESS == error_code) {
             // разбираем строку
             auto result = parser.parse(message_.data(), message_.size(), false);
             // если данные успешно разобрались
-            if(simdjson::SUCCESS == result.error()){
-                if(auto element_type{result["type"].get_string()}; simdjson::SUCCESS == element_type.error()){
-                    if(element_type.value().compare("update") == 0){
+            if (simdjson::SUCCESS == result.error()) {
+                if (auto element_type{result["type"].get_string()}; simdjson::SUCCESS == element_type.error()) {
+                    if (element_type.value().compare("update") == 0) {
                         std::string_view element_side{result["data"]["side"].get_string()};
                         std::string_view element_status{result["data"]["status"].get_string()};
                         double element_filled{result["data"]["filledSize"].get_double()};
                         double element_remaining{result["data"]["remainingSize"].get_double()};
                         int64_t element_id{result["data"]["id"].get_int64()};
                         std::string description = get_order_change_description(element_side, element_status, element_filled, element_remaining);
-//                        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info)
-//                                << "(ws private) произошли изменения в ордерах : "
-//                                << description
-//                                << " object_id  = " << id_
-//                                << " id: " << element_id
-//                                << " side: " << element_side
-//                                << " status: " << element_status
-//                                << " filledSize: " << element_filled
-//                                << " remainingSize: " << element_remaining;
                         _general_logger->info("(ws private) произошли изменения в ордерах: {} object_id = {} id: {} side: {} status: {} filledSize: {} remainingSize: {}",
                                               description, id_, element_id, element_side, element_status, element_filled, element_remaining);
                         std::cout << "" << std::endl;
-                        //buy closed 0 0 -
-
-                        /*std::vector<SBState> balances_vector = ftx_rest_private->get_balances(_error);
-                        // если вектор нулевого размера, значит была какая-то ошибка
-                        if(balances_vector.empty())
-                        {
-                            if(_error){
-                                _error.describe("Ошибка получения баланса (get_balances).");
-                                BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                                _error.clear();
-                            }
-                            // взводим триггер
-                            start_trigger = true;
-                            BOOST_LOG_SEV(ping_pong_logger, logging::trivial::info) << " start_trigger = " << start_trigger;
-                        }
-                        else{
-                            balance_sender(balances_vector);
-                        }*/
                         // проверяем и отправляем баланс
                         check_balances();
                         // сбросим счётчик
-                        ws_control = 0;
+                        //ws_control = 0;
                         // сбросим триггер
-                        start_trigger = false;
-//                        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "start_trigger set to false !!! " <<
-//                                                                                    "object_id = " << id_;
+                        //start_trigger = false;
                         //_general_logger->info("start_trigger set to false !!! object_id = {}", id_);
-                    }
-                    else{
-                        if(element_type.value().compare("subscribed") != 0){
+                    } else {
+                        if (element_type.value().compare("subscribed") != 0) {
                             _error.describe(fmt::format("json не содержит поле \"update\". json body: {}", message_));
-                            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                             _general_logger->error(_error.to_string());
                             _error.clear();
                         }
                     }
-                }
-                else{
+                } else {
                     _error.describe(fmt::format("json не содержить поле \"type\". json body: {}", message_));
-                    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                     _general_logger->error(_error.to_string());
                     _error.clear();
                 }
-            }
-            else
-            {
-                //error += "Ошибка разбора json фрейма.";
-                //error += " ((ws private) json: " + std::string(message_) + ").";
+            } else {
                 _error.describe(fmt::format("Ошибка разбора json фрейма. ((ws private) json body: {}).", message_));
-                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                 _general_logger->error(_error.to_string());
                 _error.clear();
             }
-        }
-        else
-        {
-            //error += "Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)).";
-            //error += " ((ws private) json: " + std::string(message_) + ").";
+        } else {
             _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((ws private) json body: {}).", message_));
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error;
             _general_logger->error(_error.to_string());
             _error.clear();
         }
-    }
-    catch(simdjson::simdjson_error& err)
-    {
-        //error += err.what();
-        //error += " ((ws private) json: " + std::string(message_) + ").";
+    } catch(simdjson::simdjson_error& err) {
         _error.describe(err.what() + fmt::format(" ((ws private) json body: {}).", message_));
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error;
         _general_logger->error(_error.to_string());
         _error.clear();
     }
@@ -1300,8 +899,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_)
 //---------------------------------------------------------------
 // получает более подробную информацию об изменении ордера
 //---------------------------------------------------------------
-std::string gateway::get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_)
-{
+std::string gateway::get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_) {
     std::string result_message;
 
     if (0 ==side_.compare("buy")) {
@@ -1342,8 +940,7 @@ std::string gateway::get_order_change_description(std::string_view side_, std::s
 //---------------------------------------------------------------
 // публичный канал WS
 //---------------------------------------------------------------
-void gateway::public_ws_handler(std::string_view message_, void* id_)
-{
+void gateway::public_ws_handler(std::string_view message_, void* id_) {
     //создадим парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд
@@ -1374,20 +971,12 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                             // получим итератор для быстрой вставки
                             //auto insert_it (std::end(_bids_map));
                             for(auto bid_pair_value : bids_array_element) {
-                                //insert_it = _bids_map.insert(insert_it, std::make_pair(bid_pair_value.at(0).get_double(), bid_pair_value.at(1).get_double()));
-                                ////_bids_map.insert(std::make_pair(market, std::map<double, double, std::greater<double>>()));
-                                ////_bids_map[market].insert(std::make_pair(bid_pair_value.at(0).get_double(), bid_pair_value.at(1).get_double()));
-
-                                ////_bids_map.insert(make_pair(market, map<string, map<double, double, greater<double>>>()));
-                                ////_bids_map[market].insert(make_pair("bids", map<double, double, greater<double>>()));
-                                ////_bids_map[market]["bids"].insert(make_pair(bid_pair_value.at(0).get_double(), bid_pair_value.at(1).get_double()));
                                 _markets_map.insert(make_pair(market, map<string, map<double, double>, std::greater<string>>()));
                                 _markets_map[market].insert(make_pair("bids", map<double, double>()));
                                 _markets_map[market]["bids"].insert(make_pair(bid_pair_value.at(0).get_double(), bid_pair_value.at(1).get_double()));
                             }
                         } else {
                             _error.describe(fmt::format("Ошибка получения массива bids. json body: {}.", message_));
-                            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                             _general_logger->error(_error.to_string());
                             _error.clear();
                         }
@@ -1398,20 +987,12 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                             // получим итератор для быстрой вставки
                             //auto insert_it (std::end(_asks_map));
                             for(auto ask_pair_value : asks_array_element) {
-                                //insert_it = _asks_map.insert(insert_it, std::make_pair(ask_pair_value.at(0).get_double(), ask_pair_value.at(1).get_double()));
-                                ////_asks_map.insert(std::make_pair(market, std::map<double, double>()));
-                                ////_asks_map[market].insert(std::make_pair(ask_pair_value.at(0).get_double(), ask_pair_value.at(1).get_double()));
-
-                                ////_asks_map.insert(make_pair(market, map<string, map<double, double>>()));
-                                ////_asks_map[market].insert(make_pair("asks", map<double, double>()));
-                                ////_asks_map[market]["bids"].insert(make_pair(ask_pair_value.at(0).get_double(), ask_pair_value.at(1).get_double()));
                                 _markets_map.insert(make_pair(market, map<string, map<double, double>, std::greater<string>>()));
                                 _markets_map[market].insert(make_pair("asks", map<double, double>()));
                                 _markets_map[market]["asks"].insert(make_pair(ask_pair_value.at(0).get_double(), ask_pair_value.at(1).get_double()));
                             }
                         } else {
                             _error.describe(fmt::format("Ошибка получения массива asks. json body: {}.", message_));
-                            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                             _general_logger->error(_error.to_string());
                             _error.clear();
                         }
@@ -1419,7 +1000,6 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                         orderbook_prepare(_markets_map);
                     } else {
                         _error.describe(fmt::format("Ошибка получения тикерного символа. json body: {}.", message_));
-                        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                         _general_logger->error(_error.to_string());
                         _error.clear();
                     }
@@ -1446,22 +1026,12 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                                         } else {
                                             std::cout << "ключ не найден в bids_array: " << bid_pair_value.at(0).get_double() << std::endl;
                                         }
-//                                        auto find_iterator = _bids_map.find(bid_pair_value.at(0).get_double());
-//                                        if (find_iterator != _bids_map.end()) {
-//                                            _bids_map.erase(find_iterator);
-//                                            //std::cout << "удалили ключ из bids_array: " << bid_pair_value.at(0).get_double() << std::endl;
-//                                            //std::cout << "размер bids_array: " << _bids_map.size() << std::endl;
-//                                        } else {
-//                                            ///std::cout << "ключ не найден в bids_array: " << bid_pair_value.at(0).get_double() << std::endl;
-//                                        }
                                     } else {
-//                                        _bids_map[bid_pair_value.at(0).get_double()] = bid_pair_value.at(1).get_double();
                                         _markets_map[market]["bids"][bid_pair_value.at(0).get_double()] = bid_pair_value.at(1).get_double();
                                     }
                                 }
                             } else {
                                 _error.describe(fmt::format("Ошибка получения массива bids. json body: {}.", message_));
-                                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                                 _general_logger->error(_error.to_string());
                                 _error.clear();
                             }
@@ -1481,28 +1051,17 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                                         } else {
                                             std::cout << "ключ не найден в asks_array: " << ask_pair_value.at(0).get_double() << std::endl;
                                         }
-//                                        auto find_iterator = _asks_map.find(ask_pair_value.at(0).get_double());
-//                                        if (find_iterator != _asks_map.end()) {
-//                                            _asks_map.erase(find_iterator);
-//                                            //std::cout << "удалили ключ из asks_array: " << ask_pair_value.at(0).get_double() << std::endl;
-//                                            //std::cout << "размер asks_array: " << _bids_map.size() << std::endl;
-//                                        } else {
-//                                            //std::cout << "ключ не найден в asks_array: " << ask_pair_value.at(0).get_double() << std::endl;
-//                                        }
                                     } else {
-//                                        _asks_map[ask_pair_value.at(0).get_double()] = ask_pair_value.at(1).get_double();
                                         _markets_map[market]["asks"][ask_pair_value.at(0).get_double()] = ask_pair_value.at(1).get_double();
                                     }
                                 }
                             } else {
                                 _error.describe(fmt::format("Ошибка получения массива asks. json body: {}.", message_));
-                                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                                _general_logger->error(_error.to_string());
+                                 _general_logger->error(_error.to_string());
                                 _error.clear();
                             }
                         } else {
                             _error.describe(fmt::format("Ошибка получения тикерного символа. json body: {}.", message_));
-                            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                             _general_logger->error(_error.to_string());
                             _error.clear();
                         }
@@ -1525,118 +1084,26 @@ void gateway::public_ws_handler(std::string_view message_, void* id_)
                 }
             } else {
                 _error.describe(fmt::format("Ошибка определения типа сообщения. json body: {}.", message_));
-                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                _general_logger->error(_error.to_string());
+                 _general_logger->error(_error.to_string());
                 _error.clear();
             }
         } else {
             _error.describe(fmt::format("Ошибка разбора json фрейма (error: {})", result.error()));
             //error_sender(_error.to_string());
             send_error(_error.to_string());
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
             _general_logger->error(_error.to_string());
             _error.clear();
         }
     } else {
         _error.describe("Ошибка инициализации парсера simdjson (внутренний буфер не выделился).");
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
         _general_logger->error(_error.to_string());
         _error.clear();
     }
 }
-/*void gateway::public_ws_handler(std::string_view message_, void* id_)
-{
-    // примеры поступающих сообщений:
-    // Тип 1. После subscribe на канал
-    // {"type": "subscribed", "channel": "ticker", "market": "ETH/USDT"}
-    // Тип 2. В дальнейшем работе
-    // {"channel": "ticker", "market": "ETH/USDT", "type": "update", "data": {"bid": 3146.8, "ask": 3146.9, "bidSize": 15.233, "askSize": 16.39, "last": 3146.8, "time": 1648380244.282335}}
-    //
-    std::cout << message_ << std::endl;
-    //создадим парсер
-    simdjson::dom::parser parser;
-    // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд
-    auto &&error_code = parser.allocate(0x1000, 0x04);
-    // если буфер успешно выделен
-    if (simdjson::SUCCESS == error_code) {
-        // разбираем пришедшее сообщение
-        auto result = parser.parse(message_.data(), message_.size(), false);
-        // если данные успешно разобрались
-        if (simdjson::SUCCESS == result.error()) {
-            // получаем значение поля type, чтобы понять тип сообщения (нам нужны сообщения второго типа (см. примеры выше))
-            if (auto type_element{result["type"].get_string()}; simdjson::SUCCESS == type_element.error()) {
-                if (type_element.value().compare("update") == 0) {
-                    // получаем рынок, с которого пришло сообщение (получаем его в std::string, потому что будем изменять строку)
-                    if (auto market_element{result["market"].get_c_str()}; simdjson::SUCCESS == market_element.error()) {
-                        std::string market = market_element.value();
-                        // заменим '/' (так приходит с биржи) на '-' (так требует ядро)
-                        std::replace(market.begin(), market.end(),'/','-');
-                        // получаем bid
-                        if (auto bid_element{result["data"]["bid"].get_double()}; simdjson::SUCCESS == bid_element.error()) {
-                            // получаем ask
-                            if (auto ask_element{result["data"]["ask"].get_double()}; simdjson::SUCCESS == ask_element.error()) {
-                                // получаем bidSize
-                                if (auto bid_size_element{result["data"]["bidSize"].get_double()}; simdjson::SUCCESS == bid_size_element.error()) {
-                                    // получаем askSize
-                                    if (auto ask_size_element{result["data"]["askSize"].get_double()}; simdjson::SUCCESS == ask_size_element.error()) {
-                                        STicker ticker{market,
-                                                    std::to_string(bid_element.value()),
-                                                    std::to_string(bid_size_element.value()),
-                                                    std::to_string(ask_element.value()),
-                                                    std::to_string(ask_size_element.value())};
-                                        // отправляем "стакан" только в том случае, если значения отличны от предыдущих
-                                        if (ticker.b.compare(prev_ticker.b) != ticker.B.compare(prev_ticker.B)!= ticker.a.compare(prev_ticker.a)!= ticker.A.compare(prev_ticker.A))
-                                                ticker_sender(ticker, id_);
-                                        prev_ticker = ticker;
-                                    } else {
-                                        _error.describe(fmt::format("Ошибка получения объема (askSize) лучшей заявки на продажу. json body: {}", message_));
-                                        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                                        _error.clear();
-                                    }
-                                } else {
-                                    _error.describe(fmt::format("Ошибка получения объема (bidSize) лучшей заявки на покупку. json body: {}", message_));
-                                    BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                                    _error.clear();
-                                }
-                            } else {
-                                _error.describe(fmt::format("Ошибка получения цены (ask) лучшей заявки на продажу. json body: {}", message_));
-                                BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                                _error.clear();
-                            }
-                        } else {
-                            _error.describe(fmt::format("Ошибка получения цены (bid) лучшей заявки на покупку. json body: {}", message_));
-                            BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                            _error.clear();
-                        }
-                    } else {
-                        _error.describe(fmt::format("Ошибка получения тикерного символа. json body: {}", message_));
-                        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                        _error.clear();
-                    }
-                } else {
-                    // видимо было сообщение 1 типа
-                }
-            } else {
-                _error.describe(fmt::format("Ошибка определения типа сообщения. json body: {}", message_));
-                BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-                _error.clear();
-            }
-        } else {
-            _error.describe("Ошибка разбора json фрейма.");
-            BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-            _error.clear();
-        }
-    } else {
-        _error.describe("Ошибка инициализации парсера simdjson (внутренний буфер не выделился).");
-        BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
-        _error.clear();
-    }
-}*/
 //---------------------------------------------------------------
 // подготавливает ордербук
 //---------------------------------------------------------------
-void gateway::orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_)
-{
+void gateway::orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_) {
     // это надо брать из конфига _work_config.exchange.orderbook_depth
     const int sended_size = _work_config.exchange.orderbook_depth;
     map<string, map<string, map<double, double>, std::greater<string>>>::const_iterator market_itr;
@@ -1699,21 +1166,19 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 //---------------------------------------------------------------
 // отправляет ордербук
 //---------------------------------------------------------------
-void gateway::orderbook_sender(std::string_view orderbook_)
-{
-    //std::cout << orderbook_ << std::endl;
-    //std::cout << orderbook_.size() << std::endl;
+void gateway::orderbook_sender(std::string_view orderbook_) {
     const std::int64_t result = _orderbook_channel->offer(orderbook_.data());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации об ордербуке в ядро: ", result);
+    if (result < 0) {
+        processing_error("error: Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
+    } else {
+        // запомним предудущее сообщение
+        _prev_orderbook_message = fmt::format("Результат: {}. Сообщение: {}", result, orderbook_.data());
     }
 }
 //---------------------------------------------------------------
 // callback функция результата выставления оредров
 //---------------------------------------------------------------
-void gateway::place_order_result_handler(std::string_view message_)
-{
+void gateway::place_order_result_handler(std::string_view message_) {
     //std::cout << message_ << std::endl;
     try {
         // создадим парсер
@@ -1729,35 +1194,28 @@ void gateway::place_order_result_handler(std::string_view message_)
                 // получаем значение поля success
                 auto element_success{result["success"].get_bool()};
                 // если значения == true, значит ордер выставлен успешно
-                if(element_success.value() == true){
+                if(element_success.value() == true) {
                     auto res_value = result["result"];
-//                    BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "(order_result_handler) Результат выставления ордера: " <<
-//                                                                                res_value;
                     _general_logger->info("(order_result_handler) Результат выставления ордера: {}", res_value);
-                } else if(element_success.value() == false){
+                } else if(element_success.value() == false) {
                     auto err_value = result["error"];
-                    //std::cout << "Ошибка выставления ордера. Причина: " << err_value.get_c_str() << std::endl;
                     _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
-                    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                     _general_logger->error(_error.to_string());
                     _error.clear();
                 }
-            } else{
+            } else {
                 _error.describe(fmt::format("Ошибка разбора json фрейма. ((order_result_handler) json body: {}).", message_));
-                //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error.to_string();
                 _general_logger->error(_error.to_string());
                 _error.clear();
             }
-        } else{
+        } else {
             _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((order_result_handler) json body: {}).", message_));
-            //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error;
             _general_logger->error(_error.to_string());
             _error.clear();
         }
 
-    } catch(simdjson::simdjson_error& err){
+    } catch(simdjson::simdjson_error& err) {
         _error.describe(err.what() + fmt::format(" ((order_result_handler) json body: {}).", message_));
-        //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "error: " << _error;
         _general_logger->error(_error.to_string());
         _error.clear();
     }
@@ -1765,19 +1223,12 @@ void gateway::place_order_result_handler(std::string_view message_)
 //---------------------------------------------------------------
 // отправляет в ядро информацию об открытых ордерах
 //---------------------------------------------------------------
-void gateway::order_sender(const std::vector<SOrder> &orders_vector_)
+/*void gateway::order_sender(const std::vector<SOrder> &orders_vector_)
 {
     pt::ptree root;
     pt::ptree children;
     for(auto&& order : orders_vector_)
     {
-        /*pt::ptree order_node;
-        order_node.put("id",     order.id);
-        order_node.put("side",   order.side);
-        order_node.put("type",   order.type);
-        order_node.put("price",  order.price);
-        order_node.put("status", order.status);
-        order_node.put("clientId",       order.clientId);*/
         pt::ptree order_node;
         order_node.put("t", "000000");
         order_node.put("T", "i");
@@ -1803,13 +1254,12 @@ void gateway::order_sender(const std::vector<SOrder> &orders_vector_)
         //BOOST_LOG_SEV(orderbook_logger, logging::trivial::info) << "send info about ticker: " << jsonForCore.str();
         _orderbook_logger->info("send info about ticker: {}", jsonForCore.str());
     }
-}
+}*/
 //---------------------------------------------------------------
 // отправляет в ядро информацию о балансе
 //---------------------------------------------------------------
-void gateway::balance_sender(const std::vector<SBState>& balances_vector)
-{
-    // вспомогательная строка для визуального контроля баланса в консоли/логе
+void gateway::balance_sender(const std::vector<s_balances_state>& balances_vector) {
+
     JSON balance_root;
     balance_root["event"]     = "data";
     balance_root["exchange"]  = "ftx";
@@ -1823,38 +1273,59 @@ void gateway::balance_sender(const std::vector<SBState>& balances_vector)
     for (auto&& balance: balances_vector) {
         JSON asset;
         asset["free"]  = balance.free;
-        asset["used"]  = (double)(balance.total - balance.free);
+        asset["used"]  = (balance.total - balance.free);
         asset["total"] = balance.total;
         data[balance.coin] = asset;
     }
     balance_root["data"] = data;
     //отправляем json в aeron
-    std::cout << balance_root.dump() << std::endl;
+    //std::cout << balance_root.dump() << std::endl;
     std::int64_t result = _balance_channel->offer(balance_root.dump());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации о балансе в ядро: ", result);
-    }
-    else
-    {
+    if (result < 0) {
+        processing_error("error: Ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
+    } else {
         _general_logger->info("send info about balance: {}", balance_root.dump());
         _balances_logger->info("send info about balance: {}", balance_root.dump());
-        // вставим пустую строку для наглядности
-        std::cout << "" << std::endl;
+        // запомним предыдущее сообщение
+        _prev_balance_message_core = fmt::format("Результат: {}. Сообщение: {}", result, balance_root.dump());
     }
     // теперь отравим все это дело в лог
     result = _log_channel->offer(balance_root.dump());
-    if(result < 0)
-    {
-        processing_error("error: Ошибка отправки информации о балансах в лог: ", result);
+    if (result < 0) {
+        processing_error("error: Ошибка отправки информации о балансах в лог: ", _prev_balance_message_log, result);
+    } else {
+        _logs_logger->info(balance_root.dump());
+        // запомним предыдущее сообщение
+        _prev_balance_message_log = fmt::format("Результат: {}. Сообщение: {}", result, balance_root.dump());
+    }
+
+}
+//---------------------------------------------------------------
+// проверяет баланс
+//---------------------------------------------------------------
+void gateway::check_balances() {
+    _error.clear();
+    // получаем баланс
+    std::vector<s_balances_state> balances_vector = _ftx_rest_private->get_balances(_error);
+    // если вектор нулевого размера, значит была какая-то ошибка и баланс мы не получили
+    if(balances_vector.empty()){
+        if(_error){
+            _error.describe("Ошибка получения баланса (get_balances).");
+            _general_logger->error(_error.to_string());
+            _error.clear();
+        } else {}
+    }
+    else{
+        // отправляем баланс в ядро
+        balance_sender(balances_vector);
     }
 }
 //---------------------------------------------------------------
 // обрабатывает ошибку
 //---------------------------------------------------------------
-void gateway::processing_error(std::string_view error_source_, const std::int64_t& error_code_)
-{
+void gateway::processing_error(std::string_view error_source_, const std::string& prev_messsage_, const std::int64_t& error_code_) {
     //_general_logger->info(error_source_);
+    _errors_logger->info("Предыдущее успешно отправленное сообщение: {}.", prev_messsage_);
     _errors_logger->error(error_source_);
     if(error_code_ == BACK_PRESSURED)
     {
@@ -1885,27 +1356,27 @@ void gateway::processing_error(std::string_view error_source_, const std::int64_
 //---------------------------------------------------------------
 // перезапускает публичный WS
 //---------------------------------------------------------------
-void gateway::restart_public_ws()
-{
-    ioc.reset();
+void gateway::restart_public_ws() {
+    _error.clear();
+    _ioc.reset();
     _ftx_ws_public.reset();
-    create_public_ws();
-    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "restart public ws channel";
+    // потупим немного
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    create_public_ws(_error);
     _general_logger->info("restart public ws channel.");
 }
 //---------------------------------------------------------------
 // перезапускает приватный WS
 //---------------------------------------------------------------
-void gateway::restart_private_ws(const std::string& reason_)
-{
-    ioc.reset();
+void gateway::restart_private_ws(const std::string& reason_) {
+    _error.clear();
+    _ioc.reset();
     _ftx_ws_private.reset();
     // потупим немного
-    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     // создаём сокет заново
-    create_private_ws();
-    start_trigger = true;
-    //BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "restart private ws channel: " << reason_;
+    create_private_ws(_error);
+    //start_trigger = true;
     _general_logger->info("restart private ws channel: {}", reason_);
 }
 //---------------------------------------------------------------
@@ -1918,68 +1389,6 @@ void gateway::restart_private_ws(const std::string& reason_)
     create_private_REST();
     BOOST_LOG_SEV(ftxgateway_logger, logging::trivial::info) << "restart private REST channel";
 }*/
-/*void gateway::get_precision(SCurrencyCharacteristics& curr_characteristic_)
-{
-    curr_characteristic_.pricePrecision = get_precision(curr_characteristic_.priceIncrement);
-    curr_characteristic_.sizePrecision  = get_precision(curr_characteristic_.sizeIncrement);
-}
-int gateway::get_precision(double value)
-{
-    int precision = 0;
-    std::stringstream ss;
-    ss << value;
-    std::string CheckString = ss.str();
-    size_t dotPos = CheckString.find('.');
-    if(dotPos != CheckString.npos)
-    {
-        precision = CheckString.size() - 1 - dotPos;
-    }
-    return precision;
-}
-std::string gateway::set_size_precision(std::string value)
-{
-    // зададим значение по умолчанию
-    std::string result = value;
-    size_t dotPos = value.find('.');
-    if(dotPos != value.npos)
-    {
-        value.erase(dotPos + (curr_characters.sizePrecision + 1));
-        result = value;
-    }
-    return result;
-}
-std::string gateway::set_price_precision(std::string value)
-{
-    // зададим значение по умолчанию
-    std::string result = value;
-    size_t dotPos = value.find('.');
-    if(dotPos != value.npos)
-    {
-        value.erase(dotPos + (curr_characters.pricePrecision));
-        result = value;
-    }
-    return result;
-}*/
-//---------------------------------------------------------------
-// проверяет баланс
-//---------------------------------------------------------------
-void gateway::check_balances(/*const bool &start_trigger_*/)
-{
-    // получаем баланс
-    std::vector<SBState> balances_vector = _ftx_rest_private->get_balances(_error);
-    // если вектор нулевого размера, значит была какая-то ошибка и баланс мы не получили
-    if(balances_vector.empty()){
-        if(_error){
-            _error.describe("Ошибка получения баланса (get_balances).");
-            _general_logger->error(_error.to_string());
-            _error.clear();
-        }
-    }
-    else{
-        // отправляем баланс в ядро
-        balance_sender(balances_vector);
-    }
-}
 //---------------------------------------------------------------
 // отправляет ошибки
 //---------------------------------------------------------------
@@ -1991,22 +1400,19 @@ void gateway::check_balances(/*const bool &start_trigger_*/)
 //---------------------------------------------------------------
 // проверяет, получен ли конфиг
 //---------------------------------------------------------------
-bool gateway::has_config()
-{
+bool gateway::has_config() {
     return _config_was_received;
 }
 //---------------------------------------------------------------
 // посылает запрос на получение конфига
 //---------------------------------------------------------------
-void gateway::send_config_request()
-{
+void gateway::send_config_request() {
     get_full_config_request();
 }
 //---------------------------------------------------------------
-// // запрос на получение полного конфига
+// отправляет запрос на получение полного конфига
 //---------------------------------------------------------------
-void gateway::get_full_config_request()
-{
+void gateway::get_full_config_request() {
     JSON full_cfg_request;
     full_cfg_request["event"]       = "command";
     full_cfg_request["exchange"]    = "ftx";
@@ -2018,9 +1424,9 @@ void gateway::get_full_config_request()
     full_cfg_request["timestamp"]   = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     full_cfg_request["data"]        = nullptr;
 
-    const std::int64_t result = _publisher_agent_channel->offer(full_cfg_request.dump());
+    std::int64_t result = _publisher_agent_channel->offer(full_cfg_request.dump());
     if (result < 0) {
-        processing_error("error: Ошибка отправки запроса получения полного конфига: ", result);
+        processing_error("error: Ошибка отправки запроса получения полного конфига: ", "none", result);
     } else {
         _general_logger->info("Отправлен запрос на получение полного конфига.");
     }
@@ -2028,8 +1434,7 @@ void gateway::get_full_config_request()
 //---------------------------------------------------------------
 // посылает ошибку в лог и в консоль
 //---------------------------------------------------------------
-void gateway::send_error(std::string_view error_)
-{
+void gateway::send_error(std::string_view error_) {
     _general_logger->error(error_);
     _errors_logger->error(error_);
 }
