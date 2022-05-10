@@ -51,12 +51,12 @@ namespace ftx {
                                       {"market", market}
                                   }));
     }
-    size_t WSClient::subscribe_order(const std::string& market)
+    size_t WSClient::subscribe_order(/*const std::string& market*/)
     {
         return ws->write(json::serialize(json::value{
                                       {"op", "subscribe"},
-                                      {"channel", "orders"},
-                                      {"market", market}
+                                      {"channel", "orders"}/*,
+                                      {"market", market}*/
                                   }));
     }
     size_t WSClient::ping()

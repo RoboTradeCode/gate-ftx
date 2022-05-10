@@ -299,6 +299,7 @@ bool gateway::create_public_ws(bss::error& error_) {
             size_t szt = _ftx_ws_public->subscribe_orderbook(market);
             _general_logger->info("Подписываемся на {} в публичном канале. Результат: {}", market, szt);
         }
+        _sended_orderbook_depth = _work_config.exchange.orderbook_depth;
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания публичного WebSocket канала: {}", err.what()));
@@ -326,10 +327,12 @@ bool gateway::create_private_ws(bss::error& error_) {
             exit(0);
         }
         // подписываемся на приватный поток order
-        for (auto market : _work_config._markets) {
-            size_t szt = _ftx_ws_private->subscribe_order(market);
-            _general_logger->info("Подписались на {} в приватном WS канале. Результат: {}", market, szt);
-        }
+//        for (auto market : _work_config._markets) {
+//            size_t szt = _ftx_ws_private->subscribe_order(market);
+//            _general_logger->info("Подписались на {} в приватном WS канале. Результат: {}", market, szt);
+//        }
+        // похоже надо просто подписываться на канал для всех рынков
+        _ftx_ws_private->subscribe_order();
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
@@ -355,8 +358,8 @@ void gateway::pool() {
     _ioc.run_for(std::chrono::microseconds(100));
     // каждые 15 секунд будем дёргать приватный WS и общественный WS
     if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - _last_ping_time) > 15s) {
-        size_t ping_result = _ftx_ws_private->ping();
-        ping_result = _ftx_ws_public->ping();
+        _ftx_ws_private->ping();
+        _ftx_ws_public->ping();
         _last_ping_time = std::chrono::system_clock::now();
         // если 5 минут не было ничего кроме понга в приватном канале, то нам надо перегрузить канал
         /*if(ws_control >= 20){
@@ -829,12 +832,9 @@ void gateway::order_status_sender(std::string_view order_status_) {
 // приватный канал WS (neew refactoring, обработка ошибок и отмена try catch)
 //---------------------------------------------------------------
 void gateway::private_ws_handler(std::string_view message_, void* id_) {
-    //return;
-    if (message_.compare("{\"type\": \"pong\"}") == 0) {
-        // ответ должны получать каждые 30 секунд, увеличим счётчик
-        /*if(start_trigger == true)
-            ++ws_control;
-        _ping_pong_logger->info("pong: {} start_trigger = {} ws_control = {} object_id = {}", message_, start_trigger, ws_control, id_);*/
+    if (message_.compare("{\"type\":\"pong\"}") == 0) {
+    //if (message_.find("pong") != std::string_view::npos) {
+        std::cout << "pong in private" << std::endl;
         return;
     } else {}
     try {
@@ -941,6 +941,11 @@ std::string gateway::get_order_change_description(std::string_view side_, std::s
 // публичный канал WS
 //---------------------------------------------------------------
 void gateway::public_ws_handler(std::string_view message_, void* id_) {
+    if (message_.compare("{\"type\":\"pong\"}") == 0) {
+        std::cout << "pong in public" << std::endl;
+        return;
+    } else {}
+
     //создадим парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд
@@ -1105,14 +1110,14 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
 //---------------------------------------------------------------
 void gateway::orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_) {
     // это надо брать из конфига _work_config.exchange.orderbook_depth
-    const int sended_size = _work_config.exchange.orderbook_depth;
-    map<string, map<string, map<double, double>, std::greater<string>>>::const_iterator market_itr;
-    map<string, map<double, double>>::const_iterator direct_itr;
-    map<double, double>::const_iterator ptr;
-    map<double, double>::const_reverse_iterator rptr;
+    //const int _sended_size = _work_config.exchange.orderbook_depth;
+    //map<string, map<string, map<double, double>, std::greater<string>>>::const_iterator market_itr;
+    //map<string, map<double, double>>::const_iterator direct_itr;
+    //map<double, double>::const_iterator ptr;
+    //map<double, double>::const_reverse_iterator rptr;
 
-    uint64_t start2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    for (market_itr = markets_map_.begin(); market_itr != markets_map_.end(); ++market_itr) {
+    //uint64_t start2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    for (_market_itr = markets_map_.begin(); _market_itr != markets_map_.end(); ++_market_itr) {
         JSON orderbook_root;
         orderbook_root["event"]     = "data";
         orderbook_root["exchange"]  = "ftx";
@@ -1125,38 +1130,38 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
         //json_loh j_no_init_list = json_loh::array();
         JSON data;
         // теперь проходим по bids и asks в текущем рынке
-        for (direct_itr = market_itr->second.begin(); direct_itr != market_itr->second.end(); direct_itr++) {
+        for (_direct_itr = _market_itr->second.begin(); _direct_itr != _market_itr->second.end(); _direct_itr++) {
 
-            if (direct_itr->first.compare("asks") == 0) {
+            if (_direct_itr->first.compare("asks") == 0) {
                 JSON asks;
                 // получаем итератор на начало map
-                auto begin_map = direct_itr->second.begin();
+                auto begin_map = _direct_itr->second.begin();
                 // вычисляем на сколько можем сместиться
-                auto remain_count = ((direct_itr->second.size() < sended_size) ? direct_itr->second.size() : sended_size);
+                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
                 // смещаемся на N
-                std::advance(begin_map, direct_itr->second.size() - remain_count);
+                std::advance(begin_map, _direct_itr->second.size() - remain_count);
                 //std::cout << " смещаемся на " << direct_itr->second.size() - remain_count << std::endl;
-                for (ptr = begin_map; ptr != direct_itr->second.end(); ptr++) {
+                for (_asks_itr = begin_map; _asks_itr != _direct_itr->second.end(); _asks_itr++) {
                     //j_no_init_list.push_back(2);
-                    asks.push_back({ptr->first, ptr->second});
+                    asks.push_back({_asks_itr->first, _asks_itr->second});
                 }
                 data["asks"] = asks;
             } else {
                 JSON bids;
                 // получаем обратный итератор на начало map
-                auto rbegin_map = direct_itr->second.rbegin();
+                auto rbegin_map = _direct_itr->second.rbegin();
                 // вычисляем сможем ли сдвинуть на N элементов
-                auto remain_count = ((direct_itr->second.size() < sended_size) ? direct_itr->second.size() : sended_size);
+                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
                 // смещаемся на  (map.size - N)
-                std::advance(rbegin_map, (direct_itr->second.size() - remain_count));
-                for (rptr = rbegin_map; rptr != direct_itr->second.rend(); rptr++) {
+                std::advance(rbegin_map, (_direct_itr->second.size() - remain_count));
+                for (_bids_itr = rbegin_map; _bids_itr != _direct_itr->second.rend(); _bids_itr++) {
                     //j_no_init_list.push_back(2);
-                    bids.push_back({rptr->first, rptr->second});
+                    bids.push_back({_bids_itr->first, _bids_itr->second});
                 }
                 data["bids"] = bids;
             }
         }
-        data["symbol"]    = market_itr->first;
+        data["symbol"]    = _market_itr->first;
         data["timestamp"] = 1499280391811876;
         orderbook_root["data"] = data;
 

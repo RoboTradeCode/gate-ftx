@@ -23,7 +23,7 @@ namespace ftx
         size_t subscribe_markets();
         size_t subscribe_orderbook(const std::string& market);
 
-        size_t subscribe_order(const std::string& market);
+        size_t subscribe_order(/*const std::string& market*/);
         size_t ping();
         size_t login(std::string& error);
 

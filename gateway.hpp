@@ -58,6 +58,7 @@ class gateway : public std::enable_shared_from_this<gateway>
     const char* ADMIN_ACTION_DESCRIPTION       = "Offer failed because of an administration action in the system.";
     const char* PUBLICATION_CLOSED_DESCRIPTION = "Offer failed because publication is closed.";
     const char* UNKNOWN_DESCRIPTION            = "Offer failed due to unknkown reason.";
+    int   _sended_orderbook_depth;
 
     bool        _config_was_received = false;
 
@@ -65,11 +66,17 @@ class gateway : public std::enable_shared_from_this<gateway>
     //bool                            start_trigger = false;
 
     //https://www.geeksforgeeks.org/implementing-multidimensional-map-in-c/
-    /* идем попорядку:
+    /* словарь с рынками
+     * идем попорядку:
      * содержит массив рынков (рынок является ключом)
      * значением является map, у которого ключ это массивы "ask" и "bid", а значением являются "стаканы"
      */
     map<string, map<string, map<double, double>, std::greater<string>>>                   _markets_map;
+    // итераторы для словаря с рынками
+    map<string, map<string, map<double, double>, std::greater<string>>>::const_iterator   _market_itr;
+    map<string, map<double, double>>::const_iterator                                      _direct_itr;
+    map<double, double>::const_iterator                                                   _asks_itr;
+    map<double, double>::const_reverse_iterator                                           _bids_itr;
 
     // содержит дефолтную конфигурацию
     gate_config                 _default_config;
@@ -77,10 +84,10 @@ class gateway : public std::enable_shared_from_this<gateway>
     gate_config                 _work_config;
     //
     boost::asio::io_context     _ioc;
-    // помогает "собрать" ошибки
+    // содержит ошибки
     bss::error                  _error;
     //
-    std::filesystem::path       _path;
+    //std::filesystem::path       _path;
     // переменная для отсечки времени отправки ping-а
     std::chrono::time_point<std::chrono::system_clock>  _last_ping_time;
     // содержит предыдущее успешно отправленное сообщение о балансах в ядро
