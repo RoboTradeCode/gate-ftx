@@ -48,7 +48,7 @@ class gateway : public std::enable_shared_from_this<gateway>
     // логгеры
     std::shared_ptr<spdlog::logger>  _general_logger;
     std::shared_ptr<spdlog::logger>  _logs_logger;
-    //std::shared_ptr<spdlog::logger>  _orderbook_logger;
+    std::shared_ptr<spdlog::logger>  _pingpong_logger;
     std::shared_ptr<spdlog::logger>  _balances_logger;
     std::shared_ptr<spdlog::logger>  _errors_logger;
     //std::shared_ptr<ftx::AsyncRESTClient> ftx;

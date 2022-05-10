@@ -9,7 +9,7 @@ namespace ftx {
 gateway::gateway(const std::string& config_file_path_)
  : _general_logger(spdlog::get("general")),
    _logs_logger(spdlog::get("logs")),
-   //_orderbook_logger(spdlog::get("orderbooks")),
+   _pingpong_logger(spdlog::get("pingpong")),
    _balances_logger(spdlog::get("balances")),
    _errors_logger(spdlog::get("errors"))
 {
@@ -834,10 +834,15 @@ void gateway::order_status_sender(std::string_view order_status_) {
 void gateway::private_ws_handler(std::string_view message_, void* id_) {
     if (message_.compare("{\"type\":\"pong\"}") == 0) {
     //if (message_.find("pong") != std::string_view::npos) {
-        std::cout << "pong in private" << std::endl;
+        //std::cout << "pong in private" << std::endl;
         return;
     } else {}
     try {
+        std::string_view side;
+        std::string_view status;
+        double filled;
+        double remaining;
+        int64_t id;
         //std::cout << "" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
@@ -852,22 +857,33 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
             if (simdjson::SUCCESS == result.error()) {
                 if (auto element_type{result["type"].get_string()}; simdjson::SUCCESS == element_type.error()) {
                     if (element_type.value().compare("update") == 0) {
-                        std::string_view element_side{result["data"]["side"].get_string()};
-                        std::string_view element_status{result["data"]["status"].get_string()};
-                        double element_filled{result["data"]["filledSize"].get_double()};
-                        double element_remaining{result["data"]["remainingSize"].get_double()};
-                        int64_t element_id{result["data"]["id"].get_int64()};
-                        std::string description = get_order_change_description(element_side, element_status, element_filled, element_remaining);
+                        if (auto element_side{result["data"]["side"].get_string()}; simdjson::SUCCESS == element_side.error()) {
+                            side = element_side.value();
+                        } else {}
+                        if (auto element_status{result["data"]["status"].get_string()}; simdjson::SUCCESS == element_status.error()) {
+                            status = element_status.value();
+                        } else {}
+                        if (auto element_filled{result["data"]["filledSize"].get_double()}; simdjson::SUCCESS == element_filled.error()) {
+                            filled = element_filled.value();
+                        } else {}
+                        if (auto element_remaining{result["data"]["remainingSize"].get_double()}; simdjson::SUCCESS == element_remaining.error()) {
+                            remaining = element_remaining.value();
+                        } else {}
+                        if (auto element_id{result["data"]["id"].get_int64()}; simdjson::SUCCESS == element_id.error()) {
+                            id = element_id.value();
+                        } else {}
+                        //std::string_view element_side{result["data"]["side"].get_string()};
+                        //std::string_view element_status{result["data"]["status"].get_string()};
+                        //double element_filled{result["data"]["filledSize"].get_double()};
+                        //double element_remaining{result["data"]["remainingSize"].get_double()};
+                        //int64_t element_id{result["data"]["id"].get_int64()};
+                        std::string description = get_order_change_description(side, status, filled, remaining);
                         _general_logger->info("(ws private) произошли изменения в ордерах: {} object_id = {} id: {} side: {} status: {} filledSize: {} remainingSize: {}",
-                                              description, id_, element_id, element_side, element_status, element_filled, element_remaining);
-                        std::cout << "" << std::endl;
+                                              description, id_, id, side, status, filled, remaining);
+                        //std::cout << "" << std::endl;
                         // проверяем и отправляем баланс
                         check_balances();
-                        // сбросим счётчик
-                        //ws_control = 0;
-                        // сбросим триггер
-                        //start_trigger = false;
-                        //_general_logger->info("start_trigger set to false !!! object_id = {}", id_);
+
                     } else {
                         if (element_type.value().compare("subscribed") != 0) {
                             _error.describe(fmt::format("json не содержит поле \"update\". json body: {}", message_));
@@ -876,7 +892,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
                         }
                     }
                 } else {
-                    _error.describe(fmt::format("json не содержить поле \"type\". json body: {}", message_));
+                    _error.describe(fmt::format("json не содержит поле \"type\". json body: {}", message_));
                     _general_logger->error(_error.to_string());
                     _error.clear();
                 }
@@ -942,7 +958,7 @@ std::string gateway::get_order_change_description(std::string_view side_, std::s
 //---------------------------------------------------------------
 void gateway::public_ws_handler(std::string_view message_, void* id_) {
     if (message_.compare("{\"type\":\"pong\"}") == 0) {
-        std::cout << "pong in public" << std::endl;
+        _pingpong_logger->info("pong in public ws.");
         return;
     } else {}
 

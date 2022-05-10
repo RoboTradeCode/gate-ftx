@@ -11,8 +11,8 @@ void init_logger()
 
     // Логирование биржевых стаканов
     auto orderbooks = spdlog::rotating_logger_mt<spdlog::async_factory>(
-        "orderbooks",
-        "logs/orderbooks.log",
+        "pingpong",
+        "logs/pingpong.log",
         max_size,
         max_files
     );
