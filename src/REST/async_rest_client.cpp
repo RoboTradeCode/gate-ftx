@@ -7,8 +7,8 @@
 namespace ftx
 {
 
-    AsyncRESTClient::AsyncRESTClient(const std::string api_key, const std::string api_secret,
-                                     net::io_context& ioc, const std::function<void(std::string)>& event_handler)
+    AsyncRESTClient::AsyncRESTClient(const std::string api_key_, const std::string api_secret_,
+                                     net::io_context& ioc_, const std::function<void(std::string)>& event_handler_)
 
     {
 
@@ -19,22 +19,30 @@ namespace ftx
 
         // Verify the remote server's certificate
         ctx.set_verify_mode(ssl::verify_peer);
-        async_http_client = std::make_shared<AsyncHTTPSession>(net::make_strand(ioc), ctx, api_key, api_secret, event_handler);
+        _async_http_client = std::make_shared<AsyncHTTPSession>(net::make_strand(ioc_), ctx, api_key_, api_secret_, event_handler_);
     }
-    void AsyncRESTClient::get_balances()
-    {
-        async_http_client->get("/api/wallet/balances");
+    void AsyncRESTClient::get_balances() {
+        _async_http_client->get("/api/wallet/balances");
     }
-    void AsyncRESTClient::place_order(const std::string market, const std::string side, const std::string price, const std::string size)
-    {
-        json_loh payload = {{"market", market},
-                    {"side", side},
-                    {"price", price},
+    //-----------------------------------------------------------------------
+    // выставляет ордер
+    //-----------------------------------------------------------------------
+    void AsyncRESTClient::place_order(const std::string market_, const std::string side_, const double& price_, const double& size_) {
+        json_loh payload = {{"market", market_},
+                    {"side", side_},
+                    {"price", price_},
                     {"type", "limit"},
-                    {"size", size},
+                    {"size", size_},
                     {"ioc", false},
                     {"postOnly", false},
                     {"reduceOnly", false}};
-        async_http_client->post("/api/orders", payload.dump());
+        _async_http_client->post("/api/orders", payload.dump());
+    }
+    //-----------------------------------------------------------------------
+    // отменяет все ордера
+    //-----------------------------------------------------------------------
+    void AsyncRESTClient::cancel_all_orders(const std::string market_) {
+        json_loh payload = {{"market", market_}};
+        _async_http_client->delete_("/api/orders", payload.dump());
     }
 }

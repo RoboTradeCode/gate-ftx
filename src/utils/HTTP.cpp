@@ -11,29 +11,25 @@
 
 
 namespace ssl = boost::asio::ssl;
-
 using tcp = net::ip::tcp;
 
 namespace util
 {
 
-    void HTTPSession::configure(std::string _uri, std::string _api_key, std::string _api_secret, std::string _subaccount_name)
-    {
+    void HTTPSession::configure(std::string _uri, std::string _api_key, std::string _api_secret, std::string _subaccount_name) {
         uri = _uri;
         api_key = _api_key;
         api_secret = _api_secret;
         subaccount_name = _subaccount_name;
     }
 
-    http::response<http::string_body> HTTPSession::get(const std::string target)
-    {
+    http::response<http::string_body> HTTPSession::get(const std::string target) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::get, endpoint, 11};
         return request(req);
     }
 
-    http::response<http::string_body> HTTPSession::post(const std::string target, const std::string payload)
-    {
+    http::response<http::string_body> HTTPSession::post(const std::string target, const std::string payload) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::post, endpoint, 11};
         req.body() = payload;
@@ -41,14 +37,12 @@ namespace util
         return request(req);
     }
 
-    http::response<http::string_body> HTTPSession::delete_(const std::string target)
-    {
+    http::response<http::string_body> HTTPSession::delete_(const std::string target) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::delete_, endpoint, 11};
         return request(req);
     }
-    http::response<http::string_body> HTTPSession::delete_(const std::string target, const std::string payload)
-    {
+    http::response<http::string_body> HTTPSession::delete_(const std::string target, const std::string payload) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::delete_, endpoint, 11};
         req.body() = payload;
@@ -56,8 +50,7 @@ namespace util
         return request(req);
     }
 
-    http::response<http::string_body> HTTPSession::request(http::request<http::string_body> req)
-    {
+    http::response<http::string_body> HTTPSession::request(http::request<http::string_body> req) {
         req.set(http::field::host, uri.c_str());
         req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
@@ -102,8 +95,7 @@ namespace util
         return response;
     }
 
-    void HTTPSession::authenticate(http::request<http::string_body>& req)
-    {
+    void HTTPSession::authenticate(http::request<http::string_body>& req) {
 
         std::string method(req.method_string());
         std::string path(req.target());

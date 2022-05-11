@@ -662,16 +662,21 @@ void gateway::cancel_all_orders() {
     _general_logger->info("Получена команда на отмену всех ордеров");
     _error.clear();
     for (auto market : _work_config._markets) {
-        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
-        if (_error) {
-            _error.describe(fmt::format("Ошибка отмены ордеров для {}", market));
-            _general_logger->error("Результат отмены всех ордеров: {}, ошибка: {}", cancel_all_order_result, _error.to_string());
-            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result, true, _error.to_string());
-            _error.clear();
-        } else {
-            _general_logger->info("Результат отмены всех ордеров для {} {}", market, cancel_all_order_result);
-            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result);
-        }
+//        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
+//        if (_error) {
+//            _error.describe(fmt::format("Ошибка отмены ордеров для {}", market));
+//            _general_logger->error("Результат отмены всех ордеров: {}, ошибка: {}", cancel_all_order_result, _error.to_string());
+//            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result, true, _error.to_string());
+//            _error.clear();
+//        } else {
+//            _general_logger->info("Результат отмены всех ордеров для {} {}", market, cancel_all_order_result);
+//            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result);
+//        }
+        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                               _work_config.account.secret_key,
+                                               _ioc,
+                                               [&](std::string_view message_)
+                 {shared_from_this()->place_order_result_handler(message_);})->cancel_all_orders(market);
     }
 }
 //---------------------------------------------------------------
@@ -682,7 +687,7 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
     if (side_.compare("buy") == 0) {
         _general_logger->info("Ядром выставлен ордер на покупку {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
         // выставляем ордер (синхронно)
-        std::string place_order_result = _ftx_rest_private->place_order(symbol_, "buy", price_, quantity_, _error);
+        /*std::string place_order_result = _ftx_rest_private->place_order(symbol_, "buy", price_, quantity_, _error);
         if(_error) {
             _general_logger->error("Ошибка выставления ордера на покупку: {} {}", place_order_result, _error.to_string());
             order_status_prepare("order_created", "Order was created", place_order_result, true, _error.to_string());
@@ -690,17 +695,18 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
         } else {
             _general_logger->info("Результат выставления ордера на покупку: {}", place_order_result);
             order_status_prepare("order_created", "Order was created", place_order_result);
-        }
-//        std::make_shared<ftx::AsyncRESTClient>(config.account.api_key,
-//                                               config.account.secret_key,
-//                                               ioc,
-//                                               [&](std::string_view message_)
-//                 {shared_from_this()->place_order_result_handler(message_);})->place_order("BTC/USDT", "buy", price, size);
+        }*/
+        // выставляем ордер асинхронно
+        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                               _work_config.account.secret_key,
+                                               _ioc,
+                                               [&](std::string_view message_)
+                 {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "buy", price_, quantity_);
     }
     else if (side_.compare("sell") == 0) {
         _general_logger->info("Ядром выставлен ордер на продажу {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
         // выставляем ордер (синхронно)
-        std::string place_order_result = _ftx_rest_private->place_order(symbol_, "sell", price_, quantity_, _error);
+        /*std::string place_order_result = _ftx_rest_private->place_order(symbol_, "sell", price_, quantity_, _error);
         if(_error) {
             _general_logger->error("Ошибка выставления ордера на продажу: {} {}", place_order_result, _error.to_string());
             order_status_prepare("order_created", "Order was created", place_order_result, true, _error.to_string());
@@ -708,12 +714,12 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
         } else {
             _general_logger->info("Результат выставления ордера на продажу: {}", place_order_result);
             order_status_prepare("order_created", "Order was created", place_order_result);
-        }
-//        std::make_shared<ftx::AsyncRESTClient>(config.account.api_key,
-//                                               config.account.secret_key,
-//                                               ioc,
-//                                               [&](std::string_view message_)
-//                 {shared_from_this()->place_order_result_handler(message_);})->place_order("BTC/USDT", "sell", price, size);
+        }*/
+        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                               _work_config.account.secret_key,
+                                               _ioc,
+                                               [&](std::string_view message_)
+                 {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "sell", price_, quantity_);
     }
 }
 //---------------------------------------------------------------
@@ -1213,16 +1219,17 @@ void gateway::place_order_result_handler(std::string_view message_) {
             // если данные успешно разобрались
             if(simdjson::SUCCESS == result.error()){
                 // получаем значение поля success
-                auto element_success{result["success"].get_bool()};
-                // если значения == true, значит ордер выставлен успешно
-                if(element_success.value() == true) {
-                    auto res_value = result["result"];
-                    _general_logger->info("(order_result_handler) Результат выставления ордера: {}", res_value);
-                } else if(element_success.value() == false) {
-                    auto err_value = result["error"];
-                    _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
-                    _general_logger->error(_error.to_string());
-                    _error.clear();
+                if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
+                    // если значения == true, значит ордер выставлен успешно
+                    if(element_success.value() == true) {
+                        auto res_value = result["result"];
+                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", res_value);
+                    } else if(element_success.value() == false) {
+                        auto err_value = result["error"];
+                        _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
+                        _general_logger->error(_error.to_string());
+                        _error.clear();
+                    }
                 }
             } else {
                 _error.describe(fmt::format("Ошибка разбора json фрейма. ((order_result_handler) json body: {}).", message_));

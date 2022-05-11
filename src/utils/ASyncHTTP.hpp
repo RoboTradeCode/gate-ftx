@@ -47,6 +47,7 @@ public:
     std::function<void(std::string/*, void* */)> event_handler;
     void get(const std::string& target);
     void post(const std::string& target, const std::string& payload);
+    void delete_(const std::string& target, const std::string &payload);
     void on_resolve(beast::error_code ec, tcp::resolver::results_type results);
     void on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type);
     void on_handshake(beast::error_code ec);

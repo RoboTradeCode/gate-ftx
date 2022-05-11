@@ -1,8 +1,5 @@
 #include "ASyncHTTP.hpp"
 
-//const std::string api_key = "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ";
-//const std::string api_secret = "UjXvP5_76jFvXl_uEhL28G52t9EeL2GwD884uVFV";
-
 AsyncHTTPSession::AsyncHTTPSession(net::any_io_executor ex,
                  ssl::context& ctx,
                  const std::string& api_key,
@@ -13,24 +10,16 @@ AsyncHTTPSession::AsyncHTTPSession(net::any_io_executor ex,
 , api_key_(api_key)
 , api_secret_(api_secret)
 , event_handler(std::move(event_handler))
-//session::session(net::any_io_executor ex, ssl::context& ctx)
-//    : resolver_(ex)
-//    , stream_(ex, ctx)
 {
     //std::cout << "session is create" << std::endl;
     host_ = "ftx.com";
     port_ = "443";
-    //api_key_ = "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ";
-   // api_secret_ = "UjXvP5_76jFvXl_uEhL28G52t9EeL2GwD884uVFV";
-
 }
 
-AsyncHTTPSession::~AsyncHTTPSession()
-{
+AsyncHTTPSession::~AsyncHTTPSession() {
     //std::cout << "session is destroyed" << std::endl;
 }
-void AsyncHTTPSession::get(const std::string& target)
-{
+void AsyncHTTPSession::get(const std::string& target) {
     // Set SNI Hostname (many hosts need this to handshake successfully)
     if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
     {
@@ -48,8 +37,7 @@ void AsyncHTTPSession::get(const std::string& target)
     // Look up the domain name
     resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
-void AsyncHTTPSession::post(const std::string &target, const std::string &payload)
-{
+void AsyncHTTPSession::post(const std::string &target, const std::string &payload) {
     if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
     {
         beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
@@ -68,8 +56,25 @@ void AsyncHTTPSession::post(const std::string &target, const std::string &payloa
     // Look up the domain name
     resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
-void AsyncHTTPSession::on_resolve(beast::error_code ec, tcp::resolver::results_type results)
-{
+void AsyncHTTPSession::delete_(const std::string& target, const std::string &payload) {
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    {
+        beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
+        std::cerr << ec.message() << "\n";
+        return;
+    }
+    // Set up an HTTP POST request message
+    req_.method(http::verb::delete_);
+    req_.body() = payload;
+    req_.prepare_payload();
+    req_.target(target.c_str());
+    req_.set(http::field::host, host_);
+    req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+    // Look up the domain name
+    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+}
+void AsyncHTTPSession::on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
     if(ec)
         return ;
 
@@ -78,16 +83,14 @@ void AsyncHTTPSession::on_resolve(beast::error_code ec, tcp::resolver::results_t
 
     beast::get_lowest_layer(stream_).async_connect(results, beast::bind_front_handler(&AsyncHTTPSession::on_connect,shared_from_this()));
 }
-void AsyncHTTPSession::on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type)
-{
+void AsyncHTTPSession::on_connect(beast::error_code ec, tcp::resolver::results_type::endpoint_type) {
     if(ec)
         return ;
 
     // Perform the SSL handshake
     stream_.async_handshake(ssl::stream_base::client, beast::bind_front_handler(&AsyncHTTPSession::on_handshake, shared_from_this()));
 }
-void AsyncHTTPSession::on_handshake(beast::error_code ec)
-{
+void AsyncHTTPSession::on_handshake(beast::error_code ec) {
     if(ec)
         return ;
 
@@ -97,8 +100,7 @@ void AsyncHTTPSession::on_handshake(beast::error_code ec)
     // Send the HTTP request to the remote host
     http::async_write(stream_, req_, beast::bind_front_handler(&AsyncHTTPSession::on_write, shared_from_this()));
 }
-void AsyncHTTPSession::on_write(beast::error_code ec, std::size_t bytes_transferred)
-{
+void AsyncHTTPSession::on_write(beast::error_code ec, std::size_t bytes_transferred) {
     boost::ignore_unused(bytes_transferred);
 
     if(ec)
@@ -107,8 +109,7 @@ void AsyncHTTPSession::on_write(beast::error_code ec, std::size_t bytes_transfer
     // Receive the HTTP response
     http::async_read(stream_, buffer_, res_, beast::bind_front_handler(&AsyncHTTPSession::on_read, shared_from_this()));
 }
-void AsyncHTTPSession::on_read(beast::error_code ec, std::size_t bytes_transferred)
-{
+void AsyncHTTPSession::on_read(beast::error_code ec, std::size_t bytes_transferred) {
     boost::ignore_unused(bytes_transferred);
 
     if(ec)
@@ -124,8 +125,7 @@ void AsyncHTTPSession::on_read(beast::error_code ec, std::size_t bytes_transferr
     // Gracefully close the stream
     stream_.async_shutdown(beast::bind_front_handler(&AsyncHTTPSession::on_shutdown, shared_from_this()));
 }
-void AsyncHTTPSession::on_shutdown(beast::error_code ec)
-{
+void AsyncHTTPSession::on_shutdown(beast::error_code ec) {
     if(ec == net::error::eof){
         // Rationale:
         // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
@@ -136,8 +136,7 @@ void AsyncHTTPSession::on_shutdown(beast::error_code ec)
         return ;
         // If we get here then the connection is closed gracefully
 }
-void AsyncHTTPSession::authenticate(http::request<http::string_body>& req)
-{
+void AsyncHTTPSession::authenticate(http::request<http::string_body>& req) {
     std::string method(req.method_string());
     std::string body(req.body());
     std::string path(req.target());
@@ -155,8 +154,7 @@ void AsyncHTTPSession::authenticate(http::request<http::string_body>& req)
     req.set("FTX-SIGN", sign);
 
 }
-void AsyncHTTPSession::fail(beast::error_code ec, char const* what)
-{
+void AsyncHTTPSession::fail(beast::error_code ec, char const* what) {
     std::cerr << what << ": " << ec.message() << "\n";
 }
 

@@ -4,38 +4,34 @@
 
 #include <boost/beast/core.hpp>
 #include "../utils/ASyncHTTP.hpp"
-//#include "../utils/session.h"
 #include "../utils/json.hpp"
-//#include "../utils/simdjson.h"
 #include <string>
 #include <functional>
-//#include "../utils/decl_header.h"
-//#include <logging.h>
+
 
 using json_loh = nlohmann::json;
 using JSON     = nlohmann::ordered_json;
-//using fast_json = simdjson::simdjson_result<dom::element>;
 namespace net = boost::asio;
 namespace ftx {
 
 class AsyncRESTClient
 {
   public:
-    AsyncRESTClient(const std::string api_key, const std::string api_secret, net::io_context& ioc, const std::function<void(std::string)>& event_handler);
+    AsyncRESTClient(const std::string api_key_, const std::string api_secret_, net::io_context& ioc_, const std::function<void(std::string)>& event_handler_);
 
     void get_balances();
 
-    void place_order(const std::string market,
-                     const std::string side,
-                     const std::string price,
-                     const std::string size);
+    // выставляет ордер
+    void place_order(const std::string market_,
+                     const std::string side_,
+                     const double& price_,
+                     const double& size_);
+    // отменяет все ордера
+    void cancel_all_orders(const std::string market_);
 
   private:
-    std::shared_ptr<AsyncHTTPSession> async_http_client;
+    std::shared_ptr<AsyncHTTPSession> _async_http_client;
     const std::string uri = "ftx.com";
-    //net::io_context _ioc;
-    //const std::string api_key = "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ";
-    //const std::string api_secret = "UjXvP5_76jFvXl_uEhL28G52t9EeL2GwD884uVFV";
 };
 
 }
