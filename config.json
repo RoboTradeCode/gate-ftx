@@ -98,10 +98,12 @@
       ]
     ],
     "gate_config": {
-      "exchange": {
-        "name": "ftx",
+      "info": {
+        "exchange": "ftx",
         "instance": 1,
-	"depth": 3
+        "node": "gate",
+	"depth": 3,
+        "ping_delay": 1
       },
       "account": {
         "api_key": "LKqLwrHgxiueUj8jR7WrkwoRa68BZg7_33YXVxuQ",
@@ -109,27 +111,31 @@
       },
       "aeron": {
         "publishers": {
-          "orderbook": {
+          "orderbooks": {
             "channel": "aeron:ipc?term-length=64m",
-            "stream_id": 1001
+            "stream_id": 1006
           },
-          "balance": {
+          "balances": {
             "channel": "aeron:ipc?term-length=64m",
-            "stream_id": 1002
+            "stream_id": 1005
           },
-          "log": {
+          "logs": {
             "channel": "aeron:udp?endpoint=3.66.183.27:44444",
-            "stream_id": 1001
+            "stream_id": 1008
           },
-	  "order_status": {
+	  "order_statuses": {
 	    "channel": "aeron:ipc?term-length=64m",
-	    "stream_id": 1003
+	    "stream_id": 1007
 	  }
         },
         "subscribers": {
           "core": {
             "channel": "aeron:ipc",
-            "stream_id": 1005
+            "stream_id": 1004
+          },
+          "agent": {
+            "channel": "aeron:ipc",
+            "stream_id": 1003
           }
         }
       }

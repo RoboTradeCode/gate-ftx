@@ -15,6 +15,7 @@ gateway::gateway(const std::string& config_file_path_)
 {
     // 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
     _general_logger->info("Starting...");
+    _socket_data_counter = 0;
     // получаем дефолтную конфигурацию
     _default_config = parse_config(config_file_path_);
     bss::error error;
@@ -101,13 +102,15 @@ bool gateway::create_aeron_agent_channels(bss::error& error_) {
 // загружает конфиг из файла
 //---------------------------------------------------------------
 bool gateway::load_config(bss::error& error_) noexcept {
+
     // создаем парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
-    auto &&error_code = parser.allocate(0x1000, 0x10);
+    auto &&error_code = parser.allocate(0x1000, 0x12);
     // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         auto load_result = simdjson::padded_string::load("config.json");
+        //std::cout << load_result << std::endl;
         // если файл загрузили
         if (simdjson::SUCCESS == load_result.error()) {
             auto result = parser.parse(load_result.value().data(), load_result.value().size(), false);
@@ -138,22 +141,34 @@ bool gateway::load_config(bss::error& error_) noexcept {
                 // получим часть пути для сокращения полного пути до элементов
                 if (auto cfg = result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
                     // получаем имя биржи
-                    if (auto name_element{cfg["exchange"]["name"].get_string()}; simdjson::SUCCESS == name_element.error()){
+                    if (auto name_element{cfg["info"]["exchange"].get_string()}; simdjson::SUCCESS == name_element.error()){
                         _work_config.exchange.name = name_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                     }
                     // получаем instance
-                    if (auto instance_element{cfg["exchange"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
+                    if (auto instance_element{cfg["info"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
                         _work_config.exchange.instance = instance_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
                     }
+                    // получаем node
+                    if (auto node_element{cfg["info"]["node"].get_string()}; simdjson::SUCCESS == node_element.error()) {
+                        _work_config.exchange.node = node_element.value();
+                    } else {
+                        error_.describe("При загрузке конфигурации в теле json не найден оъект \"node\".");
+                    }
                     // получаем глубину стакана
-                    if (auto orderbook_depth_element{cfg["exchange"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
+                    if (auto orderbook_depth_element{cfg["info"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
                         _work_config.exchange.orderbook_depth = orderbook_depth_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"depth\".");
+                    }
+                    // получаем значения ping
+                    if (auto ping_delay_element{cfg["info"]["ping_delay"].get_int64()}; simdjson::SUCCESS == ping_delay_element.error()) {
+                        _work_config.exchange.ping_delay = ping_delay_element.value();
+                    } else {
+                        error_.describe("При загрузке конфигурации в теле json не найден оъект \"ping_delay\".");
                     }
                     // получаем ключ
                     if (auto api_key_element{cfg["account"]["api_key"].get_string()}; simdjson::SUCCESS == api_key_element.error()) {
@@ -168,45 +183,45 @@ bool gateway::load_config(bss::error& error_) noexcept {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                     }
                     // получаем данные для канала оредбуков
-                    if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbook"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
+                    if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbooks"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                         _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook channel\".");
                     }
-                    if (auto orderbook_stream_element{cfg["aeron"]["publishers"]["orderbook"]["stream_id"].get_int64()}; simdjson::SUCCESS == orderbook_stream_element.error()) {
+                    if (auto orderbook_stream_element{cfg["aeron"]["publishers"]["orderbooks"]["stream_id"].get_int64()}; simdjson::SUCCESS == orderbook_stream_element.error()) {
                         _work_config.aeron_core.publishers.orderbook.stream_id = orderbook_stream_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook stream_id\".");
                     }
                     // получаем данные для канала балансов
-                    if (auto balance_channel_element{cfg["aeron"]["publishers"]["balance"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
+                    if (auto balance_channel_element{cfg["aeron"]["publishers"]["balances"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
                         _work_config.aeron_core.publishers.balance.channel = balance_channel_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"balance channel\".");
                     }
-                    if (auto balance_stream_element{cfg["aeron"]["publishers"]["balance"]["stream_id"].get_int64()}; simdjson::SUCCESS == balance_stream_element.error()) {
+                    if (auto balance_stream_element{cfg["aeron"]["publishers"]["balances"]["stream_id"].get_int64()}; simdjson::SUCCESS == balance_stream_element.error()) {
                         _work_config.aeron_core.publishers.balance.stream_id = balance_stream_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"balance stream_id\".");
                     }
                     // получаем данные для канала логов
-                    if (auto log_channel_element{cfg["aeron"]["publishers"]["log"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
+                    if (auto log_channel_element{cfg["aeron"]["publishers"]["logs"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
                         _work_config.aeron_core.publishers.logs.channel = log_channel_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"log channel\".");
                     }
-                    if (auto log_stream_element{cfg["aeron"]["publishers"]["log"]["stream_id"].get_int64()}; simdjson::SUCCESS == log_stream_element.error()) {
+                    if (auto log_stream_element{cfg["aeron"]["publishers"]["logs"]["stream_id"].get_int64()}; simdjson::SUCCESS == log_stream_element.error()) {
                         _work_config.aeron_core.publishers.logs.stream_id = log_stream_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"log stream_id\".");
                     }
                     // получаем данные для канала статуса ордеров
-                    if (auto order_status_channel_element{cfg["aeron"]["publishers"]["order_status"]["channel"].get_string()}; simdjson::SUCCESS == order_status_channel_element.error()) {
+                    if (auto order_status_channel_element{cfg["aeron"]["publishers"]["order_statuses"]["channel"].get_string()}; simdjson::SUCCESS == order_status_channel_element.error()) {
                         _work_config.aeron_core.publishers.order_status.channel = order_status_channel_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"order_status channel\".");
                     }
-                    if (auto order_status_stream_element{cfg["aeron"]["publishers"]["order_status"]["stream_id"].get_int64()}; simdjson::SUCCESS == order_status_stream_element.error()) {
+                    if (auto order_status_stream_element{cfg["aeron"]["publishers"]["order_statuses"]["stream_id"].get_int64()}; simdjson::SUCCESS == order_status_stream_element.error()) {
                         _work_config.aeron_core.publishers.order_status.stream_id = order_status_stream_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"order_status stream_id\".");
@@ -425,22 +440,34 @@ void gateway::config_from_agent_handler(std::string_view message_) {
             // получим часть пути для сокращения полного пути до элементов
             if (auto cfg = parse_result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
                 // получаем имя биржи
-                if (auto name_element{cfg["exchange"]["name"].get_string()}; simdjson::SUCCESS == name_element.error()){
+                if (auto name_element{cfg["info"]["exchange"].get_string()}; simdjson::SUCCESS == name_element.error()){
                     _work_config.exchange.name = name_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                 }
                 // получаем instance
-                if (auto instance_element{cfg["exchange"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
+                if (auto instance_element{cfg["info"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
                     _work_config.exchange.instance = instance_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
                 }
+                // получаем node
+                if (auto node_element{cfg["info"]["node"].get_string()}; simdjson::SUCCESS == node_element.error()) {
+                    _work_config.exchange.node = node_element.value();
+                } else {
+                    _error.describe("При загрузке конфигурации в теле json не найден оъект \"node\".");
+                }
                 // получаем глубину стакана
-                if (auto orderbook_depth_element{cfg["exchange"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
+                if (auto orderbook_depth_element{cfg["info"]["depth"].get_int64()}; simdjson::SUCCESS == orderbook_depth_element.error()) {
                     _work_config.exchange.orderbook_depth = orderbook_depth_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"depth\".");
+                }
+                // получаем значения ping
+                if (auto ping_delay_element{cfg["info"]["ping_delay"].get_int64()}; simdjson::SUCCESS == ping_delay_element.error()) {
+                    _work_config.exchange.ping_delay = ping_delay_element.value();
+                } else {
+                    _error.describe("При загрузке конфигурации в теле json не найден оъект \"ping_delay\".");
                 }
                 // получаем ключ
                 if (auto api_key_element{cfg["account"]["api_key"].get_string()}; simdjson::SUCCESS == api_key_element.error()) {
@@ -455,45 +482,45 @@ void gateway::config_from_agent_handler(std::string_view message_) {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                 }
                 // получаем данные для канала оредбуков
-                if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbook"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
+                if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbooks"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                     _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook channel\".");
                 }
-                if (auto orderbook_stream_element{cfg["aeron"]["publishers"]["orderbook"]["stream_id"].get_int64()}; simdjson::SUCCESS == orderbook_stream_element.error()) {
+                if (auto orderbook_stream_element{cfg["aeron"]["publishers"]["orderbooks"]["stream_id"].get_int64()}; simdjson::SUCCESS == orderbook_stream_element.error()) {
                     _work_config.aeron_core.publishers.orderbook.stream_id = orderbook_stream_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"orderbook stream_id\".");
                 }
                 // получаем данные для канала балансов
-                if (auto balance_channel_element{cfg["aeron"]["publishers"]["balance"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
+                if (auto balance_channel_element{cfg["aeron"]["publishers"]["balances"]["channel"].get_string()}; simdjson::SUCCESS == balance_channel_element.error()) {
                     _work_config.aeron_core.publishers.balance.channel = balance_channel_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"balance channel\".");
                 }
-                if (auto balance_stream_element{cfg["aeron"]["publishers"]["balance"]["stream_id"].get_int64()}; simdjson::SUCCESS == balance_stream_element.error()) {
+                if (auto balance_stream_element{cfg["aeron"]["publishers"]["balances"]["stream_id"].get_int64()}; simdjson::SUCCESS == balance_stream_element.error()) {
                     _work_config.aeron_core.publishers.balance.stream_id = balance_stream_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"balance stream_id\".");
                 }
                 // получаем данные для канала логов
-                if (auto log_channel_element{cfg["aeron"]["publishers"]["log"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
+                if (auto log_channel_element{cfg["aeron"]["publishers"]["logs"]["channel"].get_string()}; simdjson::SUCCESS == log_channel_element.error()) {
                     _work_config.aeron_core.publishers.logs.channel = log_channel_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"log channel\".");
                 }
-                if (auto log_stream_element{cfg["aeron"]["publishers"]["log"]["stream_id"].get_int64()}; simdjson::SUCCESS == log_stream_element.error()) {
+                if (auto log_stream_element{cfg["aeron"]["publishers"]["logs"]["stream_id"].get_int64()}; simdjson::SUCCESS == log_stream_element.error()) {
                     _work_config.aeron_core.publishers.logs.stream_id = log_stream_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"log stream_id\".");
                 }
                 // получаем данные для канала статуса ордеров
-                if (auto order_status_channel_element{cfg["aeron"]["publishers"]["order_status"]["channel"].get_string()}; simdjson::SUCCESS == order_status_channel_element.error()) {
+                if (auto order_status_channel_element{cfg["aeron"]["publishers"]["order_statuses"]["channel"].get_string()}; simdjson::SUCCESS == order_status_channel_element.error()) {
                     _work_config.aeron_core.publishers.order_status.channel = order_status_channel_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"order_status channel\".");
                 }
-                if (auto order_status_stream_element{cfg["aeron"]["publishers"]["order_status"]["stream_id"].get_int64()}; simdjson::SUCCESS == order_status_stream_element.error()) {
+                if (auto order_status_stream_element{cfg["aeron"]["publishers"]["order_statuses"]["stream_id"].get_int64()}; simdjson::SUCCESS == order_status_stream_element.error()) {
                     _work_config.aeron_core.publishers.order_status.stream_id = order_status_stream_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"order_status stream_id\".");
@@ -545,7 +572,7 @@ void gateway::aeron_handler(std::string_view message_) {
                     if (event_element.value() == "command") {
                         // проверяем биржу
                         if (auto exchange_element{parse_result["exchange"].get_string()}; simdjson::SUCCESS == exchange_element.error()) {
-                            if (exchange_element.value() == "ftx") {
+                            if (exchange_element.value() == _work_config.exchange.name) {
                                 std::string_view action;
                                 std::string_view side;
                                 std::string symbol;
@@ -791,9 +818,9 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
     }
     JSON order_status_root;
     order_status_root["event"]     = event;
-    order_status_root["exchange"]  = "ftx";
-    order_status_root["node"]      = "gate";
-    order_status_root["instance"]  = "1";
+    order_status_root["exchange"]  = _work_config.exchange.name;
+    order_status_root["node"]      = _work_config.exchange.node;
+    order_status_root["instance"]  = _work_config.exchange.instance;
     order_status_root["action"]    = action_;
     order_status_root["message"]   = message_;
     order_status_root["algo"]      = "3t_php";
@@ -1109,6 +1136,13 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
                     }
                     // видимо было сообщение 1 типа (subscribed)
                 }
+                _socket_data_counter++;
+                if (std::chrono::duration_cast<std::chrono::seconds>
+                        (std::chrono::system_clock::now() - _last_metric_ping_time).count() >= _work_config.exchange.ping_delay) {
+
+                    _last_metric_ping_time = std::chrono::system_clock::now();
+                    metric_sender();
+                }
             } else {
                 _error.describe(fmt::format("Ошибка определения типа сообщения. json body: {}.", message_));
                  _general_logger->error(_error.to_string());
@@ -1128,6 +1162,28 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
     }
 }
 //---------------------------------------------------------------
+// отправляет метрику
+//---------------------------------------------------------------
+void gateway::metric_sender(){
+    JSON metric_root;
+    metric_root["event"]     = "info";
+    metric_root["exchange"]  = _work_config.exchange.name;
+    metric_root["node"]      = _work_config.exchange.node;
+    metric_root["instance"]  = _work_config.exchange.instance;
+    metric_root["action"]    = "ping";
+    metric_root["message"]   = nullptr;
+    metric_root["algo"]      = "cross_3t_php";
+    metric_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    metric_root["date"]      = _socket_data_counter;
+    int64_t result = _log_channel->offer(metric_root.dump());
+    if (result < 0) {
+        processing_error("error: Ошибка отправки метрики в лог: ", _prev_order_status_message_log, result);
+    } else {
+        //_logs_logger->info(metric_root.dump());
+        //_prev_order_status_message_log = fmt::format("Результат: {}. Сообщение: {}", result, metric_root.dump());
+    }
+}
+//---------------------------------------------------------------
 // подготавливает ордербук
 //---------------------------------------------------------------
 void gateway::orderbook_prepare(const map<string, map<string, map<double, double>, std::greater<string>>>& markets_map_) {
@@ -1142,9 +1198,9 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
     for (_market_itr = markets_map_.begin(); _market_itr != markets_map_.end(); ++_market_itr) {
         JSON orderbook_root;
         orderbook_root["event"]     = "data";
-        orderbook_root["exchange"]  = "ftx";
-        orderbook_root["node"]      = "gate";
-        orderbook_root["instance"]  = "1";
+        orderbook_root["exchange"]  = _work_config.exchange.name;
+        orderbook_root["node"]      = _work_config.exchange.node;
+        orderbook_root["instance"]  = _work_config.exchange.instance;
         orderbook_root["action"]    = "orderbook";
         orderbook_root["message"]   = nullptr;
         orderbook_root["algo"]      = "signal";
@@ -1201,6 +1257,7 @@ void gateway::orderbook_sender(std::string_view orderbook_) {
         // запомним предудущее сообщение
         _prev_orderbook_message = fmt::format("Результат: {}. Сообщение: {}", result, orderbook_.data());
     }
+    //std::cout << result << " length: " << orderbook_.size() << std::endl;
 }
 //---------------------------------------------------------------
 // callback функция результата выставления оредров
@@ -1290,9 +1347,9 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
 
     JSON balance_root;
     balance_root["event"]     = "data";
-    balance_root["exchange"]  = "ftx";
-    balance_root["node"]      = "gate";
-    balance_root["instance"]  = "1";
+    balance_root["exchange"]  = _work_config.exchange.name;
+    balance_root["node"]      = _work_config.exchange.node;
+    balance_root["instance"]  = _work_config.exchange.instance;
     balance_root["action"]    = "balances";
     balance_root["message"]   = nullptr;
     balance_root["algo"]      = "3t_php";
@@ -1443,9 +1500,9 @@ void gateway::send_config_request() {
 void gateway::get_full_config_request() {
     JSON full_cfg_request;
     full_cfg_request["event"]       = "command";
-    full_cfg_request["exchange"]    = "ftx";
-    full_cfg_request["node"]        = "gate";
-    full_cfg_request["instance"]    = "1";
+    full_cfg_request["exchange"]    = _work_config.exchange.name;
+    full_cfg_request["node"]        = _work_config.exchange.node;
+    full_cfg_request["instance"]    = _work_config.exchange.instance;
     full_cfg_request["action"]      = "get_config";
     full_cfg_request["message"]     = nullptr;
     full_cfg_request["algo"]        = nullptr;

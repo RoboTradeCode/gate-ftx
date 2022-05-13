@@ -10,7 +10,6 @@
 #include "../utils/error.hpp"
 
 using json_loh = nlohmann::json;
-//using fast_json = simdjson::simdjson_result<dom::element>;
 
 namespace ftx {
 

@@ -28,6 +28,8 @@ class AsyncRESTClient
                      const double& size_);
     // отменяет все ордера
     void cancel_all_orders(const std::string market_);
+    // отменяет ордер по идентфикатору
+    void cancel_order(const std::string& order_id_);
 
   private:
     std::shared_ptr<AsyncHTTPSession> _async_http_client;

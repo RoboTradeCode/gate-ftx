@@ -74,6 +74,22 @@ void AsyncHTTPSession::delete_(const std::string& target, const std::string &pay
     // Look up the domain name
     resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
+void AsyncHTTPSession::delete_(const std::string &target_) {
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    {
+        beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
+        std::cerr << ec.message() << "\n";
+        return;
+    }
+    // Set up an HTTP POST request message
+    req_.method(http::verb::delete_);
+    req_.target(target_.c_str());
+    req_.set(http::field::host, host_);
+    req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+    // Look up the domain name
+    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+}
 void AsyncHTTPSession::on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
     if(ec)
         return ;

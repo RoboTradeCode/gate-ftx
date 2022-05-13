@@ -86,8 +86,10 @@ class gateway : public std::enable_shared_from_this<gateway>
     boost::asio::io_context     _ioc;
     // содержит ошибки
     bss::error                  _error;
-    //
-    //std::filesystem::path       _path;
+    // счетчик принятых из сокета данных
+    uint64_t                    _socket_data_counter;
+    // переменная для отслеживания отправки метрик
+    std::chrono::time_point<std::chrono::system_clock>  _last_metric_ping_time;
     // переменная для отсечки времени отправки ping-а
     std::chrono::time_point<std::chrono::system_clock>  _last_ping_time;
     // содержит предыдущее успешно отправленное сообщение о балансах в ядро
@@ -118,7 +120,7 @@ class gateway : public std::enable_shared_from_this<gateway>
     // принимает конфиг от агента
     void        config_from_agent_handler(std::string_view message_);
     void        private_ws_handler(std::string_view message_, void* id_);
-    // callback функция результата выставления оредров
+    // callback функция результата асинхронного выставления и отмены оредров
     void        place_order_result_handler(std::string_view message_);
     // обрабатывает и логирует ошибку от каналов aeron
     void        processing_error(std::string_view error_source_, const std::string& prev_messsage_, const std::int64_t& error_code_);
@@ -128,6 +130,8 @@ class gateway : public std::enable_shared_from_this<gateway>
     void        cancel_order(const int64_t& order_id);
     // отменяет все ордера
     void        cancel_all_orders();
+    // отправляет метрики
+    void        metric_sender();
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера

@@ -2,15 +2,11 @@
 #include <iostream>
 #include <sstream>
 
-
-
 namespace ftx
 {
 
     AsyncRESTClient::AsyncRESTClient(const std::string api_key_, const std::string api_secret_,
-                                     net::io_context& ioc_, const std::function<void(std::string)>& event_handler_)
-
-    {
+                                     net::io_context& ioc_, const std::function<void(std::string)>& event_handler_) {
 
         // The SSL context is required, and holds certificates
         ssl::context ctx{ssl::context::tlsv12_client};
@@ -44,5 +40,11 @@ namespace ftx
     void AsyncRESTClient::cancel_all_orders(const std::string market_) {
         json_loh payload = {{"market", market_}};
         _async_http_client->delete_("/api/orders", payload.dump());
+    }
+    //-----------------------------------------------------------------------
+    // отменяет ордер по идентфикатору
+    //-----------------------------------------------------------------------
+    void AsyncRESTClient::cancel_order(const std::string &order_id_) {
+        _async_http_client->delete_("/api/orders/" + order_id_);
     }
 }
