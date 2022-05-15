@@ -23,13 +23,51 @@ namespace util
         subaccount_name = _subaccount_name;
     }
 
-    http::response<http::string_body> HTTPSession::get(const std::string target) {
+    http::response<http::string_body> HTTPSession::get(const std::string& target) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::get, endpoint, 11};
         return request(req);
     }
+    http::response<http::string_body> HTTPSession::get_config(const std::string& _uri, const std::string& _target){
 
-    http::response<http::string_body> HTTPSession::post(const std::string target, const std::string payload) {
+        http::request<http::string_body> req(http::verb::get, _target, 11);
+        // Задаём поля HTTPS заголовка
+        req.set(http::field::host, _uri.c_str());
+        req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        ssl::context ctx{ssl::context::tls_client};
+        ctx.set_default_verify_paths();
+
+        tcp::resolver resolver{ioc};
+        ssl::stream<tcp::socket> stream{ioc, ctx};
+
+        // Set SNI Hostname (many hosts need this to handshake successfully)
+        if (!SSL_set_tlsext_host_name(stream.native_handle(), _uri.c_str())) {
+            boost::system::error_code ec{static_cast<int>(::ERR_get_error()),                                     net::error::get_ssl_category()};
+            throw boost::system::system_error{ec};
+        }
+
+        auto const results = resolver.resolve(_uri.c_str(), "443");
+        net::connect(stream.next_layer(), results.begin(), results.end());
+        stream.handshake(ssl::stream_base::client);
+
+        if (req.method() == http::verb::post) {
+            req.set(http::field::content_type, "application/json");
+        }
+
+        http::write(stream, req);
+        boost::beast::flat_buffer buffer;
+        http::response<http::string_body> response;
+        http::read(stream, buffer, response);
+
+        boost::system::error_code ec;
+        stream.shutdown(ec);
+        if (ec == boost::asio::error::eof) {
+            ec.assign(0, ec.category());
+        }
+
+        return response;
+    }
+    http::response<http::string_body> HTTPSession::post(const std::string& target, const std::string& payload) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::post, endpoint, 11};
         req.body() = payload;
@@ -37,12 +75,12 @@ namespace util
         return request(req);
     }
 
-    http::response<http::string_body> HTTPSession::delete_(const std::string target) {
+    http::response<http::string_body> HTTPSession::delete_(const std::string& target) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::delete_, endpoint, 11};
         return request(req);
     }
-    http::response<http::string_body> HTTPSession::delete_(const std::string target, const std::string payload) {
+    http::response<http::string_body> HTTPSession::delete_(const std::string& target, const std::string& payload) {
         std::string endpoint = "/api/" + target;
         http::request<http::string_body> req{http::verb::delete_, endpoint, 11};
         req.body() = payload;
@@ -62,8 +100,7 @@ namespace util
         ssl::stream<tcp::socket> stream{ioc, ctx};
 
         // Set SNI Hostname (many hosts need this to handshake successfully)
-        if (!SSL_set_tlsext_host_name(stream.native_handle(), uri.c_str()))
-        {
+        if (!SSL_set_tlsext_host_name(stream.native_handle(), uri.c_str())) {
             boost::system::error_code ec{static_cast<int>(::ERR_get_error()),                                     net::error::get_ssl_category()};
             throw boost::system::system_error{ec};
         }
@@ -85,8 +122,7 @@ namespace util
 
         boost::system::error_code ec;
         stream.shutdown(ec);
-        if (ec == boost::asio::error::eof)
-        {
+        if (ec == boost::asio::error::eof) {
             // Rationale:
             // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
             ec.assign(0, ec.category());

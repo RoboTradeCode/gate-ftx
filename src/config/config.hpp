@@ -20,6 +20,10 @@ struct gate_config
 {
     // список рынков
     std::vector<std::string> _markets;
+
+    std::string source;
+    std::string config_uri;
+    std::string config_target;
     // биржа
     struct exchange
     {

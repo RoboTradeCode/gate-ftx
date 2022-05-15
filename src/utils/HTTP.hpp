@@ -25,10 +25,11 @@ namespace util
     public:
         void configure(std::string _uri, std::string _api_key, std::string _api_secret, std::string _subaccount_name);
 
-        http::response<http::string_body> get(const std::string target);
-        http::response<http::string_body> post(const std::string target, const std::string payload);
-        http::response<http::string_body> delete_(const std::string target);
-        http::response<http::string_body> delete_(const std::string target, const std::string payload);
+        http::response<http::string_body> get(const std::string& _target);
+        http::response<http::string_body> get_config(const std::string& _uri, const std::string& _target);
+        http::response<http::string_body> post(const std::string& _target, const std::string& _payload);
+        http::response<http::string_body> delete_(const std::string& _target);
+        http::response<http::string_body> delete_(const std::string& _target, const std::string& _payload);
 
     private:
         http::response<http::string_body> request(http::request<http::string_body> req);

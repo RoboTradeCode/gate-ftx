@@ -52,13 +52,24 @@ gate_config parse_config(const std::string& config_file_path_){
     config.aeron.subscribers.core.channel   = core[0].value_or("");
     config.aeron.subscribers.core.stream_id = core[1].value_or(0);*/
 
-    toml::node_view aeron    = tbl["aeron"];
-    toml::node_view agent_s  = aeron["subscribers"]["agent"];
-    toml::node_view logs     = aeron["publishers"]["logs"];
-    toml::node_view agent_p  = aeron["publishers"]["agent"];
+    toml::node_view gate         = tbl["gate"];
+    toml::node_view configurator = tbl["configuration"];
+    toml::node_view aeron        = tbl["aeron"];
+    toml::node_view agent_s      = aeron["subscribers"]["agent"];
+    toml::node_view logs         = aeron["publishers"]["logs"];
+    toml::node_view agent_p      = aeron["publishers"]["agent"];
+
+    // получаем имя и инстанс
+    config.exchange.name     = gate["exchange_name"].value_or("ftx");
+    config.exchange.instance = gate["instance_name"].value_or(0);
+
+    config.source            = configurator["source"].value_or("unknown");
+
+    config.config_uri        = configurator["api"][0].value_or("unknown");
+    config.config_target     = configurator["api"][1].value_or("unknown");
 
     // канал агента
-    config.aeron_agent.subscribers.agent.channel   = agent_s[0].value_or("xyz");
+    config.aeron_agent.subscribers.agent.channel   = agent_s[0].value_or("");
     config.aeron_agent.subscribers.agent.stream_id = agent_s[1].value_or(0);
 
     // канал логов

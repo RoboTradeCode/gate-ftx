@@ -5,7 +5,6 @@
 #include "gateway.hpp"
 #include "src/utils/mylogger.hpp"
 
-//using namespace std;
 
 void sigint_handler(int);
 
@@ -21,10 +20,76 @@ int main() {
     try {
         // создаем шлюз
         std::shared_ptr<ftx::gateway> gateway = std::make_shared<ftx::gateway>(CONFIG_FILE_PATH);
+        bss::error error;
+        // получаем источник получения конфига
+        std::string source = gateway->get_config_source();
+        // если источник конфига - файл
+        if (source == "file") {
+            if(std::filesystem::exists("config.json")) {
+                if (gateway->load_config_from_file(error)) {
+                    gateway->send_message("Конфигурация загружена из файла.");
+                } else {
+                    gateway->send_error(error.to_string());
+                    std::this_thread::sleep_for(1s);
+                    return EXIT_FAILURE;
+                }
+            } else {
+                error.describe("В параметрах конфигурации указан режим работы с файлом, но файла не существует");
+                gateway->send_error(error.to_string());
+                std::this_thread::sleep_for(1s);
+                return EXIT_FAILURE;
+            }
+        } else if (source == "agent") {
+            if (gateway->create_agent_channel()) {
+                gateway->send_config_request();
+                // получаем конфиг (ожидаем 5 секунд, если получаем быстрее, то выходим из цикла)
+                int try_count = 0;
+                while( try_count < 5) {
+                    gateway->pool_from_agent();
+                    if (gateway->has_config())
+                        break;
+                    else
+                    std::this_thread::sleep_for(1s);
+                    ++try_count;
+                }
+                // если конфиг не был получен, то работать нет смысла
+                if (!gateway->has_config()) {
+                    gateway->send_error("Файл конфигурации от агента не получен.");
+                    std::this_thread::sleep_for(1s);
+                    return EXIT_FAILURE;
+                } else {
+                    gateway->send_message("Конфигурация получена от агента.");
+                }
+            } else {
+                gateway->send_error("Ошибка создания aeron канала для агента.");
+                std::this_thread::sleep_for(1s);
+                return EXIT_FAILURE;
+            }
+        } else if (source == "api") {
+            if (gateway->get_config_from_api(error)) {
+                // если конфиг не был получен, то работать нет смысла
+                if (!gateway->has_config()) {
+                    gateway->send_error("Файл конфигурации от агента не получен.");
+                    std::this_thread::sleep_for(1s);
+                    return EXIT_FAILURE;
+                } else {
+                    gateway->send_message("Конфигурация получена с сервера.");
+                }
+            } else {
+                gateway->send_error(error.to_string());
+                std::this_thread::sleep_for(1s);
+                return EXIT_FAILURE;
+            }
+        } else {
+            gateway->send_error("Файл конфигурации содержит неизвестный источник получения конфига.");
+            std::this_thread::sleep_for(1s);
+            return EXIT_FAILURE;
+        }
+
+
         // !!!!!!!!!!!!!  на время тестирования  !!!!!!!!!!!!
         // если такой файл есть, то загрузим конфиг из него
-        bss::error error;
-        if(std::filesystem::exists("config.json")) {
+        /*if(std::filesystem::exists("config.json")) {
             if (!gateway->load_config(error))
                 gateway->send_error(error.to_string());
         } else {
@@ -46,7 +111,7 @@ int main() {
                 std::this_thread::sleep_for(1s);
                 return EXIT_FAILURE;
             }
-        }
+        }*/
 
         // продолжаем подготовку к запуску
         if (not gateway->preparation_for_launch()) {

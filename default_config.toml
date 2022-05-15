@@ -1,3 +1,16 @@
+# данные для гейта
+[gate]
+exchange_name = 'ftx'
+instance_name = '1'
+[configuration]
+# Откуда загружать конфигурацию. Может быть три значения: agent, api, file.
+
+source = 'api'
+
+# эндпойнт для получения конфигурации от конфигуратора.
+#api = {url = 'https://configurator.robotrade.io/ftx/1', params = {only_new = false}}
+api = ["configurator.robotrade.io", "/ftx/1?only_new=false"]
+
 # настройки работы протокола aeron
 [aeron]
 # настройки каналов откуда будем принимать данные
