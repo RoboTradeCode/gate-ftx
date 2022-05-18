@@ -13,7 +13,6 @@ gateway::gateway(const std::string& config_file_path_)
    _balances_logger(spdlog::get("balances")),
    _errors_logger(spdlog::get("errors"))
 {
-    // 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
     _general_logger->info("Starting...");
 
     _socket_data_counter = 0;
@@ -50,7 +49,7 @@ bool gateway::preparation_for_launch() {
     if (create_aeron_core_channels(_error)) {
         if (create_private_REST(_error)) {
             if (create_private_ws(_error)) {
-                if (create_public_ws(_error)) {
+                 if (create_public_ws(_error)) {
                     return true;
                 } else {
                     _general_logger->error(_error.to_string());
@@ -842,10 +841,10 @@ void gateway::aeron_handler(std::string_view message_) {
 //void gateway::cancel_order(const int64_t &order_id) {
 void gateway::cancel_order(const std::string& order_id_) {
     _general_logger->info("Получена команда на отмену ордера: order_id = {}.", order_id_);
-    _error.clear();
+    //_error.clear();
     //std::string cancel_order_result = _ftx_rest_private->cancel_order(std::to_string(order_id), _error);
-    // !!!!!!!! сделать асинхронно !!!!!!!!!!
-    std::string cancel_order_result = _ftx_rest_private->cancel_order(order_id_, _error);
+
+    /*std::string cancel_order_result = _ftx_rest_private->cancel_order(order_id_, _error);
     if(_error) {
         _error.describe("Ошибка отмены ордера");
         _general_logger->error("Результат отмены ордера (id): {} {} {}", order_id_, cancel_order_result, _error.to_string());
@@ -854,14 +853,19 @@ void gateway::cancel_order(const std::string& order_id_) {
     } else {
         _general_logger->info("Результат отмены ордера (id): {} {}", order_id_, cancel_order_result);
         order_status_prepare("order_cancel", "Order was cancel", cancel_order_result);
-    }
+    }*/
+    std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                           _work_config.account.secret_key,
+                                           _ioc,
+                                           [&](std::string_view message_)
+             {shared_from_this()->place_order_result_handler(message_);})->cancel_order(order_id_);
 }
 //---------------------------------------------------------------
 // отменяет все ордера
 //---------------------------------------------------------------
 void gateway::cancel_all_orders() {
     _general_logger->info("Получена команда на отмену всех ордеров");
-    _error.clear();
+//    _error.clear();
     for (auto market : _work_config._markets) {
 //        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
 //        if (_error) {
@@ -884,7 +888,7 @@ void gateway::cancel_all_orders() {
 // обрабатывает команду на создания ордера
 //---------------------------------------------------------------
 void gateway::create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_) {
-    _error.clear();
+    //_error.clear();
     if (side_.compare("buy") == 0) {
         _general_logger->info("Ядром выставлен ордер на покупку {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
         // выставляем ордер (синхронно)
@@ -1022,14 +1026,28 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
 void gateway::order_status_sender(std::string_view order_status_) {
     std::int64_t result = _order_status_channel->offer(order_status_.data());
     if (result < 0) {
-        processing_error("error: Ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
+        processing_error("Ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
+        if (result == -3) {
+            // пробуем еще раз
+            result = _order_status_channel->offer(order_status_.data());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
+            }
+        }
     } else {
         _prev_order_status_message_core = fmt::format("Результат: {}. Сообщение: {}", result, order_status_.data());
     }
     // теперь отравим все это дело в лог
     result = _log_channel->offer(order_status_.data());
     if (result < 0) {
-        processing_error("error: Ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
+        processing_error("Ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
+        if (result == -3) {
+            // пробуем отправить еще раз
+            result = _log_channel->offer(order_status_.data());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
+            }
+        }
     } else {
         _logs_logger->info(order_status_.data());
         _prev_order_status_message_log = fmt::format("Результат: {}. Сообщение: {}", result, order_status_.data());
@@ -1351,10 +1369,17 @@ void gateway::metric_sender(){
     metric_root["date"]      = _socket_data_counter;
     int64_t result = _log_channel->offer(metric_root.dump());
     if (result < 0) {
-        processing_error("error: Ошибка отправки метрики в лог: ", _prev_order_status_message_log, result);
+        processing_error("Ошибка отправки метрики в лог: ", _prev_metric_message, result);
+        if (result == -3) {
+            // отправляем еще раз
+            result = _log_channel->offer(metric_root.dump());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки метрики в лог: ", _prev_metric_message, result);
+            }
+        }
     } else {
         //_logs_logger->info(metric_root.dump());
-        //_prev_order_status_message_log = fmt::format("Результат: {}. Сообщение: {}", result, metric_root.dump());
+        _prev_metric_message = fmt::format("Результат: {}. Сообщение: {}", result, metric_root.dump());
     }
 }
 //---------------------------------------------------------------
@@ -1419,11 +1444,11 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 void gateway::orderbook_sender(std::string_view orderbook_) {
     std::int64_t result = _orderbook_channel->offer(orderbook_.data());
     if (result < 0) {
-        processing_error("error: Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
+        processing_error("Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
         if (result == -3) {
             result = _orderbook_channel->offer(orderbook_.data());
             if (result < 0) {
-                processing_error("error: Повторная ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
+                processing_error("Повторная ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
             }
         }
     } else {
@@ -1505,7 +1530,14 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
     //std::cout << balance_root.dump() << std::endl;
     std::int64_t result = _balance_channel->offer(balance_root.dump());
     if (result < 0) {
-        processing_error("error: Ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
+        processing_error("Ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
+        if (result == -3) {
+            // отправляем еще раз
+            result = _balance_channel->offer(balance_root.dump());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
+            }
+        }
     } else {
         _general_logger->info("send info about balance: {}", balance_root.dump());
         _balances_logger->info("send info about balance: {}", balance_root.dump());
@@ -1516,6 +1548,13 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
     result = _log_channel->offer(balance_root.dump());
     if (result < 0) {
         processing_error("error: Ошибка отправки информации о балансах в лог: ", _prev_balance_message_log, result);
+        if (result == -3) {
+            // отправляем еще раз
+            result = _log_channel->offer(balance_root.dump());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки информации о балансах в ядро: ", _prev_balance_message_log, result);
+            }
+        }
     } else {
         _logs_logger->info(balance_root.dump());
         // запомним предыдущее сообщение
@@ -1631,7 +1670,14 @@ void gateway::get_full_config_request() {
 
     std::int64_t result = _publisher_agent_channel->offer(full_cfg_request.dump());
     if (result < 0) {
-        processing_error("error: Ошибка отправки запроса получения полного конфига: ", "none", result);
+        processing_error("Ошибка отправки запроса получения полного конфига: ", "none", result);
+        // функция get_full_config_request вызывается в самом начале и у нас все должно быть девственно чисто, но все-равно проверим на "-3"
+        if (result == -3) {
+            result = _publisher_agent_channel->offer(full_cfg_request.dump());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки запроса получения полного конфига: ", "none", result);
+            }
+        }
     } else {
         _general_logger->info("Отправлен запрос на получение полного конфига.");
     }

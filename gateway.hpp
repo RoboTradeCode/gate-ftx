@@ -1,14 +1,15 @@
 #ifndef GATEWAY_H
 #define GATEWAY_H
 
+#include <chrono>
+#include <map>
+
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
-
 #include <boost/multiprecision/cpp_dec_float.hpp>
 
 #include "src/AERON/Publisher.hpp"
 #include "src/AERON/Subscriber.hpp"
-
 #include "src/WS/ws_client.hpp"
 #include "src/REST/rest_client.hpp"
 #include "src/REST/async_rest_client.hpp"
@@ -16,16 +17,14 @@
 #include "src/utils/error.hpp"
 #include "src/utils/HTTP.hpp"
 
-#include <chrono>
-#include <map>
 
-using namespace std;
-//using dec_float = boost::multiprecision::cpp_dec_float_50;
+//using namespace std;
 
 namespace ftx {
 
 class gateway : public std::enable_shared_from_this<gateway>
 {
+private:
     // каналы AERON для агента
     std::shared_ptr<Subscriber>     _subscriber_agent_channel;
     std::shared_ptr<Publisher>      _publisher_agent_channel;
@@ -53,17 +52,18 @@ class gateway : public std::enable_shared_from_this<gateway>
     std::shared_ptr<spdlog::logger>  _errors_logger;
     //std::shared_ptr<ftx::AsyncRESTClient> ftx;
 
+    // константы ошибок aeron
     const char* BACK_PRESSURED_DESCRIPTION     = "Offer failed due to back pressure.";
     const char* NOT_CONNECTED_DESCRIPTION      = "Offer failed because publisher is not connected to a core.";
     const char* ADMIN_ACTION_DESCRIPTION       = "Offer failed because of an administration action in the system.";
     const char* PUBLICATION_CLOSED_DESCRIPTION = "Offer failed because publication is closed.";
     const char* UNKNOWN_DESCRIPTION            = "Offer failed due to unknkown reason.";
-    int   _sended_orderbook_depth;
 
+    // глубина посылаемого ядру ордербука
+    int         _sended_orderbook_depth;
+    // флаг успешного получения конфига
     bool        _config_was_received = false;
 
-    //int                             ws_control = 0;
-    //bool                            start_trigger = false;
 
     //https://www.geeksforgeeks.org/implementing-multidimensional-map-in-c/
     /* словарь с рынками
@@ -79,31 +79,31 @@ class gateway : public std::enable_shared_from_this<gateway>
     map<double, double>::const_reverse_iterator                                           _bids_itr;
 
     // содержит дефолтную конфигурацию
-    gate_config                 _default_config;
+    gate_config                _default_config;
     // содержит рабочую конфигурацию
-    gate_config                 _work_config;
+    gate_config                _work_config;
     //
-    boost::asio::io_context     _ioc;
+    boost::asio::io_context    _ioc;
     // содержит ошибки
-    bss::error                  _error;
+    bss::error                 _error;
     // счетчик принятых из сокета данных
-    uint64_t                    _socket_data_counter;
+    uint64_t                   _socket_data_counter;
     // переменная для отслеживания отправки метрик
     std::chrono::time_point<std::chrono::system_clock>  _last_metric_ping_time;
     // переменная для отсечки времени отправки ping-а
     std::chrono::time_point<std::chrono::system_clock>  _last_ping_time;
     // содержит предыдущее успешно отправленное сообщение о балансах в ядро
-    std::string                 _prev_balance_message_core = "none";
+    std::string                _prev_balance_message_core = "none";
     // содержит предыдущее успешно отправленное сообщение о балансах в лог
-    std::string                 _prev_balance_message_log  = "none";
+    std::string                _prev_balance_message_log  = "none";
     // содержит предыдущее успешно отправленное сообщение об ордербуках
-    std::string                 _prev_orderbook_message    = "none";
+    std::string                _prev_orderbook_message    = "none";
     // содержит предыдущее успешно отправленное сообщение о статусе ордера в ядро
-    std::string                 _prev_order_status_message_core = "none";
+    std::string                _prev_order_status_message_core = "none";
     // содержит предыдущее успешно отправленное сообшение о статусе ордера с лог
-    std::string                 _prev_order_status_message_log  = "none";
+    std::string                _prev_order_status_message_log  = "none";
     // содержит предыдущее успешно отправленное сообщение с метрикой
-    std::string                 _prev_metric_message = "none";
+    std::string                _prev_metric_message = "none";
 
     // callback функция принимает ордербуки с биржы через public WebSocket
     void        public_ws_handler(std::string_view message_, void* id_);
@@ -147,7 +147,7 @@ class gateway : public std::enable_shared_from_this<gateway>
     void        order_status_sender(std::string_view order_status_);
     // проверяет баланс
     void        check_balances(/*const bool& start_trigger_ = false*/);
-    //
+    // отправляет баланс
     void        balance_sender(const std::vector<s_balances_state>& balances_vector_);
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
@@ -159,40 +159,40 @@ public:
     util::HTTPSession http_session;
 
     // конструктор
-    explicit gateway(const std::string& config_file_path_);
+    explicit    gateway(const std::string& config_file_path_);
     // отпраляет запрос на получение конфига
-    void    send_config_request();
+    void        send_config_request();
     // возвращает конфиг с сервера
-    bool    get_config_from_api(bss::error& error_);
+    bool        get_config_from_api(bss::error& error_);
     // проверяет получен ли конфиг
-    bool    has_config();
+    bool        has_config();
     // загружает конфиг из файла
-    bool    load_config_from_file(bss::error& error_) noexcept;
+    bool        load_config_from_file(bss::error& error_) noexcept;
     // загружет конфиг из json
-    bool    load_config_from_json(const std::string& message_, bss::error& error_) noexcept;
+    bool        load_config_from_json(const std::string& message_, bss::error& error_) noexcept;
     // посылает ошибку в консоль и лог
-    void    send_error(std::string_view error_);
+    void        send_error(std::string_view error_);
     // посылает сообщение в консоль и лог
-    void    send_message(std::string_view message_);
+    void        send_message(std::string_view message_);
     //
-    void    pool();
+    void        pool();
     //
-    void    pool_from_agent();
+    void        pool_from_agent();
     // подготовка к запуску (создает каналы aeron, сокеты и т.д.)
-    bool    preparation_for_launch();
+    bool        preparation_for_launch();
     //
     //void    order_sender(const std::vector<SOrder>& orders_vector_);
     // перезапускает публичный WebSocket
-    void    restart_public_ws();
+    void        restart_public_ws();
     // перезапускает приватный WebSocket
-    void    restart_private_ws(const std::string& reason_);
+    void        restart_private_ws(const std::string& reason_);
     //void    restart_private_REST();
 
     //void create_json();
     // получает источник конфига
     std::string get_config_source();
     // создает каналы для агента
-    bool    create_agent_channel();
+    bool        create_agent_channel();
 
 };
 }

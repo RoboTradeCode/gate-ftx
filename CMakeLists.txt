@@ -11,7 +11,6 @@ set(LIB_AERON $ENV{HOME}/aeron)
 
 set(SPDLOG_DIR ${CMAKE_SOURCE_DIR})
 
-#find_package(Boost 1.78.0 REQUIRED COMPONENTS log_setup log json)
 find_package(Boost 1.78.0 REQUIRED COMPONENTS json)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -35,8 +34,6 @@ add_executable(
     src/AERON/Subscriber.hpp
     src/config/config.cpp
     src/config/config.hpp
-    #src/utils/logging.cpp
-    #src/utils/logging.hpp
     src/utils/Encoding.cpp
     src/utils/Encoding.hpp
     src/utils/simdjson.cpp
@@ -65,8 +62,6 @@ target_link_libraries(
     ftxGateway
     Threads::Threads
     OpenSSL::SSL
-#    Boost::log_setup
-#    Boost::log
     Boost::json
     fmt::fmt
     ${LIB_AERON}/cppbuild/Release/lib/libaeron_client.a
