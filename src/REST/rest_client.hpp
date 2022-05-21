@@ -16,51 +16,32 @@ namespace ftx {
 class RESTClient
 {
   public:
-    RESTClient(const std::string api_key, const std::string api_secret);
+    RESTClient(const std::string api_key_, const std::string api_secret_);
 
-    //SCurrencyCharacteristics list_markets(const std::string market, bss::error& error_);
-
-    std::vector<s_order> get_open_orders(const std::string market, bss::error& error_);
-    //json_loh get_orders_history(const std::string market);
-
-    /*json_loh place_order(const std::string market,
-                     const std::string side,
-                     const std::string clientId,
-                     double price,
-                     double size,
-                     bool ioc = false,
-                     bool post_only = false,
-                     bool reduce_only = false);*/
-
-    std::string place_order(const std::string market,
-                            const std::string side,
+    // получает открытые ордера
+    std::vector<s_order> get_open_orders(const std::string market_, bss::error& error_);
+    // создет ордер
+    std::string place_order(const std::string market_,
+                            const std::string side_,
                             //const std::string price,
                             const double price_,
                             //const std::string size,
                             const double size_,
                             bss::error& error_,
-                            bool ioc = false,
-                            bool post_only = false,
-                            bool reduce_only = false);
+                            bool ioc_ = false,
+                            bool post_only_ = false,
+                            bool reduce_only_ = false);
 
-    // Market order overload
-    /*json_loh place_order(const std::string market,
-                     const std::string side,
-                     double size,
-                     bool ioc = false,
-                     bool post_only = false,
-                     bool reduce_only = false);*/
-
-    std::string cancel_all_orders(const std::string market, bss::error& error_);
-    std::string cancel_order(const std::string& order_id, bss::error& error_);
-    //json_loh cancel_order_by_client_id(const std::string client_id);
-
+    // отменяет все ордера
+    std::string cancel_all_orders(const std::string market_, bss::error& error_);
+    // отменяет ордер по идентификатору
+    std::string cancel_order(const std::string& order_id_, bss::error& error_);
+    // получает балансы
     std::vector<s_balances_state> get_balances(bss::error& error_);
 
   private:
-    util::HTTPSession http_client;
-    const std::string uri = "ftx.com";
-    const std::string subaccount_name = "";
+    util::HTTPSession _http_client;
+    const std::string _uri = "ftx.com";
 };
 
 }

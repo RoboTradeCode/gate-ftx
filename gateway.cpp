@@ -477,12 +477,11 @@ bool gateway::create_public_ws(bss::error& error_) {
                                                             [&](std::string_view message_, void* id_)
                                 {shared_from_this()->public_ws_handler(message_, id_);},
                                                             _errors_logger);
-        //ftx_ws_public->subscribe_orderbook("ETH/USDT");
         // подписываемся на канал ордербуков
-        for (auto market : _work_config._markets) {
+        /*for (auto market : _work_config._markets) {
             size_t szt = _ftx_ws_public->subscribe_orderbook(market);
             _general_logger->info("Подписываемся на {} в публичном канале. Результат: {}", market, szt);
-        }
+        }*/
         _sended_orderbook_depth = _work_config.exchange.orderbook_depth;
         return true;
     } catch (const std::exception& err) {
@@ -510,13 +509,8 @@ bool gateway::create_private_ws(bss::error& error_) {
             _general_logger->error("Ending...");
             exit(0);
         }
-        // подписываемся на приватный поток order
-//        for (auto market : _work_config._markets) {
-//            size_t szt = _ftx_ws_private->subscribe_order(market);
-//            _general_logger->info("Подписались на {} в приватном WS канале. Результат: {}", market, szt);
-//        }
         // похоже надо просто подписываться на канал для всех рынков
-        _ftx_ws_private->subscribe_order();
+        /*_ftx_ws_private->subscribe_order();*/
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
@@ -1068,7 +1062,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         double filled;
         double remaining;
         int64_t id;
-        //std::cout << "" << message_ << std::endl;
+        std::cout << "from private" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
@@ -1366,7 +1360,7 @@ void gateway::metric_sender(){
     metric_root["message"]   = nullptr;
     metric_root["algo"]      = "cross_3t_php";
     metric_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    metric_root["date"]      = _socket_data_counter;
+    metric_root["data"]      = _socket_data_counter;
     int64_t result = _log_channel->offer(metric_root.dump());
     if (result < 0) {
         processing_error("Ошибка отправки метрики в лог: ", _prev_metric_message, result);
@@ -1515,7 +1509,7 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
     balance_root["instance"]  = _default_config.exchange.instance;
     balance_root["action"]    = "balances";
     balance_root["message"]   = nullptr;
-    balance_root["algo"]      = "3t_php";
+    balance_root["algo"]      = "cross_3t_php";
     balance_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     JSON data;
     for (auto&& balance: balances_vector_) {
@@ -1589,28 +1583,19 @@ void gateway::processing_error(std::string_view error_source_, const std::string
     //_general_logger->info(error_source_);
     _errors_logger->info("Предыдущее успешно отправленное сообщение: {}.", prev_messsage_);
     _errors_logger->error(error_source_);
-    if(error_code_ == BACK_PRESSURED)
-    {
+    if (error_code_ == BACK_PRESSURED) {
         //_general_logger->error(BACK_PRESSURED_DESCRIPTION);
         _errors_logger->error(BACK_PRESSURED_DESCRIPTION);
-    }
-    else if(error_code_ == NOT_CONNECTED)
-    {
+    } else if (error_code_ == NOT_CONNECTED) {
         //_general_logger->error(NOT_CONNECTED_DESCRIPTION);
         _errors_logger->error(NOT_CONNECTED_DESCRIPTION);
-    }
-    else if(error_code_ == ADMIN_ACTION)
-    {
+    } else if (error_code_ == ADMIN_ACTION) {
         //_general_logger->error(ADMIN_ACTION_DESCRIPTION);
         _errors_logger->error(ADMIN_ACTION_DESCRIPTION);
-    }
-    else if(error_code_ == PUBLICATION_CLOSED)
-    {
+    } else if (error_code_ == PUBLICATION_CLOSED) {
         //_general_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
         _errors_logger->error(PUBLICATION_CLOSED_DESCRIPTION);
-    }
-    else
-    {
+    } else {
         //_general_logger->error(UNKNOWN_DESCRIPTION);
         _errors_logger->error(UNKNOWN_DESCRIPTION);
     }

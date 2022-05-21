@@ -23,7 +23,7 @@ namespace util
         using Response = http::response<http::string_body>;
 
     public:
-        void configure(std::string _uri, std::string _api_key, std::string _api_secret, std::string _subaccount_name);
+        void configure(std::string _uri, std::string _api_key, std::string _api_secret);
 
         http::response<http::string_body> get(const std::string& _target);
         http::response<http::string_body> get_config(const std::string& _uri, const std::string& _target);
@@ -41,7 +41,6 @@ namespace util
         std::string uri;
         std::string api_key;
         std::string api_secret;
-        std::string subaccount_name;
     };
 }
 #endif

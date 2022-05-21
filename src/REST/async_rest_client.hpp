@@ -2,15 +2,16 @@
 #ifndef TEST_ASYNC_REST_CLIENT_H
 #define TEST_ASYNC_REST_CLIENT_H
 
+
 #include <boost/beast/core.hpp>
-#include "../utils/ASyncHTTP.hpp"
-#include "../utils/json.hpp"
 #include <string>
 #include <functional>
 
+#include "../utils/ASyncHTTP.hpp"
+#include "../utils/json.hpp"
 
-using json_loh = nlohmann::json;
-using JSON     = nlohmann::ordered_json;
+using JSON = nlohmann::json;
+//using JSON     = nlohmann::ordered_json;
 namespace net = boost::asio;
 namespace ftx {
 

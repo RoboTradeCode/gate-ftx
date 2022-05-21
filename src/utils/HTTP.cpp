@@ -16,11 +16,10 @@ using tcp = net::ip::tcp;
 namespace util
 {
 
-    void HTTPSession::configure(std::string _uri, std::string _api_key, std::string _api_secret, std::string _subaccount_name) {
+    void HTTPSession::configure(std::string _uri, std::string _api_key, std::string _api_secret) {
         uri = _uri;
         api_key = _api_key;
         api_secret = _api_secret;
-        subaccount_name = _subaccount_name;
     }
 
     http::response<http::string_body> HTTPSession::get(const std::string& target) {
@@ -151,9 +150,6 @@ namespace util
         //req.set("FTX-TS", ts);
         req.set("FTX-TS", std::to_string(ts));
         req.set("FTX-SIGN", sign);
-        if (!subaccount_name.empty()) {
-            req.set("FTX-SUBACCOUNT", subaccount_name);
-        }
     }
 }
 

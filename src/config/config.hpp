@@ -6,14 +6,6 @@
 #include <vector>
 #include "../toml++/toml.h"
 
-/*extern const char* DEFAULT_EXCHANGE_NAME;
-extern const char* DEFAULT_SUBSCRIBER_CHANNEL;
-extern const char* DEFAULT_PUBLISHER_CHANNEL;
-extern const int DEFAULT_CORE_STREAM_ID;
-extern const int DEFAULT_BALANCE_STREAM_ID;
-extern const int DEFAULT_TICKER_STREAM_ID;
-extern const int DEFAULT_LOG_STREAM_ID;
-extern const int DEFAULT_BUFFER_SIZE;*/
 
 // Структура конфигурации ядра
 struct gate_config

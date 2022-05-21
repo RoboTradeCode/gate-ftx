@@ -24,7 +24,7 @@ namespace ftx
     // выставляет ордер
     //-----------------------------------------------------------------------
     void AsyncRESTClient::place_order(const std::string market_, const std::string side_, const double& price_, const double& size_) {
-        json_loh payload = {{"market", market_},
+        JSON payload = {{"market", market_},
                     {"side", side_},
                     {"price", price_},
                     {"type", "limit"},
@@ -38,7 +38,7 @@ namespace ftx
     // отменяет все ордера
     //-----------------------------------------------------------------------
     void AsyncRESTClient::cancel_all_orders(const std::string market_) {
-        json_loh payload = {{"market", market_}};
+        JSON payload = {{"market", market_}};
         _async_http_client->delete_("/api/orders", payload.dump());
     }
     //-----------------------------------------------------------------------
