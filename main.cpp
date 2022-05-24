@@ -86,33 +86,6 @@ int main() {
             return EXIT_FAILURE;
         }
 
-
-        // !!!!!!!!!!!!!  на время тестирования  !!!!!!!!!!!!
-        // если такой файл есть, то загрузим конфиг из него
-        /*if(std::filesystem::exists("config.json")) {
-            if (!gateway->load_config(error))
-                gateway->send_error(error.to_string());
-        } else {
-            // если файла нет, то работаем через агента
-            gateway->send_config_request();
-            // получаем конфиг (ожидаем 5 секунд, если получаем быстрее, то выходим из цикла)
-            int try_count = 0;
-            while( try_count < 5) {
-                gateway->pool_from_agent();
-                if (gateway->has_config())
-                    break;
-                else
-                std::this_thread::sleep_for(1s);
-                ++try_count;
-            }
-            // если конфиг не был получен, то работать нет смысла
-            if (!gateway->has_config()) {
-                gateway->send_error("Файл конфигурации не получен.");
-                std::this_thread::sleep_for(1s);
-                return EXIT_FAILURE;
-            }
-        }*/
-
         // продолжаем подготовку к запуску
         if (not gateway->preparation_for_launch()) {
             return EXIT_FAILURE;

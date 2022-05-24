@@ -478,10 +478,10 @@ bool gateway::create_public_ws(bss::error& error_) {
                                 {shared_from_this()->public_ws_handler(message_, id_);},
                                                             _errors_logger);
         // подписываемся на канал ордербуков
-        /*for (auto market : _work_config._markets) {
+        for (auto market : _work_config._markets) {
             size_t szt = _ftx_ws_public->subscribe_orderbook(market);
             _general_logger->info("Подписываемся на {} в публичном канале. Результат: {}", market, szt);
-        }*/
+        }
         _sended_orderbook_depth = _work_config.exchange.orderbook_depth;
         return true;
     } catch (const std::exception& err) {
@@ -510,7 +510,7 @@ bool gateway::create_private_ws(bss::error& error_) {
             exit(0);
         }
         // похоже надо просто подписываться на канал для всех рынков
-        /*_ftx_ws_private->subscribe_order();*/
+        _ftx_ws_private->subscribe_order();
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
@@ -1449,7 +1449,7 @@ void gateway::orderbook_sender(std::string_view orderbook_) {
         // запомним предудущее сообщение
         _prev_orderbook_message = fmt::format("Результат: {}. Сообщение: {}", result, orderbook_.data());
     }
-    std::cout << result << " length: " << orderbook_.size() << std::endl;
+    //std::cout << result << " length: " << orderbook_.size() << std::endl;
 }
 //---------------------------------------------------------------
 // callback функция результата выставления оредров
