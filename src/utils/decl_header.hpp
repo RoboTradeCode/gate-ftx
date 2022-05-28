@@ -34,7 +34,7 @@ struct s_order{
     // время создания оредра
     std::string createdAt;
     // идентификатор ордера (присваивается биржей)
-    uint64_t    id;
+    int64_t    id;
     // цена
     double      price;
     // покупка или продажа
@@ -44,7 +44,22 @@ struct s_order{
     // тип ордера (рыночный/лимитный)
     std::string type;
     // клиентский идентификатор (присваивает шлюз, не может повторяться)
-    std::string clientId;
+    //std::string clientId;
+    std::string symbol;
+    // количество
+    double amount;
+    //
+    double filled;
+    //
+    double remaining;
+};
+struct order_status {
+    // подробное описание что произошло с ордеро
+    std::string description;
+    // может принимать одно из следующих значений: create_order, cancel_order, order_status
+    std::string action;
+    // сообщение (не регламентировано)
+    std::string message;
 };
 
 /*struct SCurrencyCharacteristics

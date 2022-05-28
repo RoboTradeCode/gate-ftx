@@ -1015,6 +1015,38 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
     order_status_sender(order_status_root.dump());
 }
 //---------------------------------------------------------------
+// подготавливаем json order_status
+//---------------------------------------------------------------
+void gateway::order_status_prepare(const s_order& response_, std::string_view action_, std::string_view message_) {
+
+    JSON order_status_root;
+    //order_status_root["event"]     = event;
+    order_status_root["event"]     = "data";
+    order_status_root["exchange"]  = _default_config.exchange.name;
+    order_status_root["node"]      = _work_config.exchange.node;
+    order_status_root["instance"]  = _default_config.exchange.instance;
+    order_status_root["action"]    = action_;
+    order_status_root["message"]   = message_;
+    order_status_root["algo"]      = "3t_php";
+    order_status_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    JSON data;
+    {
+        data["id"]        = response_.id;
+        data["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        data["status"]    = response_.status;
+        data["symbol"]    = response_.symbol;
+        data["type"]      = response_.type;
+        data["side"]      = response_.side;
+        data["price"]     = response_.price;
+        data["amount"]    = response_.amount;
+        data["filled"]    = response_.filled;
+    }
+    // потом заполнить это
+    order_status_root["data"] = data;
+    // отправляем информацию в ядро
+    order_status_sender(order_status_root.dump());
+}
+//---------------------------------------------------------------
 // отправляет order_status
 //---------------------------------------------------------------
 void gateway::order_status_sender(std::string_view order_status_) {
@@ -1057,11 +1089,11 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         return;
     } else {}
     try {
-        std::string_view side;
-        std::string_view status;
-        double filled;
-        double remaining;
-        int64_t id;
+        //std::string_view side;
+        //std::string_view status;
+        //double filled;
+        //double remaining;
+        //int64_t id;
         std::cout << "from private" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
@@ -1076,30 +1108,49 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
             if (simdjson::SUCCESS == result.error()) {
                 if (auto element_type{result["type"].get_string()}; simdjson::SUCCESS == element_type.error()) {
                     if (element_type.value().compare("update") == 0) {
-                        if (auto element_side{result["data"]["side"].get_string()}; simdjson::SUCCESS == element_side.error()) {
-                            side = element_side.value();
+                        s_order response;
+                        if (auto element_type{result["data"]["type"].get_string()}; simdjson::SUCCESS == element_type.error()) {
+                            response.type = element_type.value();
                         } else {}
+                        if (auto element_side{result["data"]["side"].get_string()}; simdjson::SUCCESS == element_side.error()) {
+                            //side = element_side.value();
+                            response.side = element_side.value();
+                        } else {}
+                        if (auto element_price{result["data"]["price"].get_double()}; simdjson::SUCCESS == element_price.error()) {
+                            response.price = element_price.value();
+                        } else {}
+                        if (auto element_size{result["data"]["size"].get_double()}; simdjson::SUCCESS == element_size.error()) {
+                            response.amount = element_size.value();
+                            std::cout << response.amount << std::endl;
+                        }
                         if (auto element_status{result["data"]["status"].get_string()}; simdjson::SUCCESS == element_status.error()) {
-                            status = element_status.value();
+                            //status = element_status.value();
+                            response.status = element_status.value();
                         } else {}
                         if (auto element_filled{result["data"]["filledSize"].get_double()}; simdjson::SUCCESS == element_filled.error()) {
-                            filled = element_filled.value();
+                            //filled = element_filled.value();
+                            response.filled = element_filled.value();
                         } else {}
                         if (auto element_remaining{result["data"]["remainingSize"].get_double()}; simdjson::SUCCESS == element_remaining.error()) {
-                            remaining = element_remaining.value();
+                            //remaining = element_remaining.value();
+                            response.remaining = element_remaining.value();
                         } else {}
                         if (auto element_id{result["data"]["id"].get_int64()}; simdjson::SUCCESS == element_id.error()) {
-                            id = element_id.value();
+                            //id = element_id.value();
+                            response.id = element_id.value();
+                        } else {}
+                        if (auto element_symbol{result["data"]["market"].get_string()}; simdjson::SUCCESS == element_symbol.error()) {
+                            response.symbol = element_symbol.value();
                         } else {}
                         //std::string_view element_side{result["data"]["side"].get_string()};
                         //std::string_view element_status{result["data"]["status"].get_string()};
                         //double element_filled{result["data"]["filledSize"].get_double()};
                         //double element_remaining{result["data"]["remainingSize"].get_double()};
                         //int64_t element_id{result["data"]["id"].get_int64()};
-                        std::string description = get_order_change_description(side, status, filled, remaining);
+                        order_status order_status = get_order_change_description(response.side, response.status, response.filled, response.remaining);
                         _general_logger->info("(ws private) произошли изменения в ордерах: {} object_id = {} id: {} side: {} status: {} filledSize: {} remainingSize: {}",
-                                              description, id_, id, side, status, filled, remaining);
-                        //std::cout << "" << std::endl;
+                                              order_status.description, id_, response.id, response.side, response.status, response.filled, response.remaining);
+                        order_status_prepare(response, order_status.action, order_status.message);
                         // проверяем и отправляем баланс
                         check_balances();
 
@@ -1134,43 +1185,53 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
 //---------------------------------------------------------------
 // получает более подробную информацию об изменении ордера
 //---------------------------------------------------------------
-std::string gateway::get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_) {
-    std::string result_message;
+order_status gateway::get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_) {
 
-    if (0 ==side_.compare("buy")) {
+    //std::string result_message;
+    order_status result_status;
+
+    if (0 == side_.compare("buy")) {
         if (0 == status_.compare("new")) {
             // выставлен новый ордер
-            result_message = " Создан ордер на покупку. ";
+            result_status.description = " Создан ордер на покупку. ";
+            result_status.action      = "create_order";
+            result_status.message     = "Order was created";
         } else if (0 == status_.compare("closed")) {
             // ордер был выполнен или отменен
             if ((0 == filled_size_) && (0 == remaining_size_)) {
                 //result_message = " Покупка выполнена. ";
-                result_message = " Покупка отменена. ";
+                result_status.description = " Покупка отменена. ";
+                result_status.action      = "cancel_order";
+                result_status.message     = "Order was canceled";
             } else {
                 //result_message = " Покупка отменена. ";
-                result_message = " Покупка выполнена. ";
+                result_status.description = " Покупка выполнена. ";
             }
         } else {
-            result_message = " Неопределенный статус в ордере buy. ";
+            result_status.description = " Неопределенный статус в ордере buy. ";
         }
     } else if (0 == side_.compare("sell")) {
         if (0 == status_.compare("new")) {
             // выставлен новый ордер
-            result_message = " Создан ордер на продажу. ";
+            result_status.description = " Создан ордер на продажу. ";
+            result_status.action      = "create_order";
+            result_status.message     = "Order was created";
         } else if (0 == status_.compare("closed")) {
             // ордер выполнен или отменен
             if ((0 == filled_size_) && (0 == remaining_size_)) {
                 //result_message = " Продажа выполнена. ";
-                result_message = " Продажа отменена. ";
+                result_status.description = " Продажа отменена. ";
+                result_status.action      = "cancel_order";
+                result_status.message     = "Order was canceled";
             } else {
                 //result_message = " Продажа отменена. ";
-                result_message = " Продажа выполнена. ";
+                result_status.description = " Продажа выполнена. ";
             }
         }
     } else {
-        result_message = " Неопределенная операция.";
+        result_status.description = " Неопределенная операция.";
     }
-    return result_message;
+    return result_status;
 }
 //---------------------------------------------------------------
 // публичный канал WS

@@ -143,6 +143,7 @@ private:
     void        orderbook_sender(std::string_view orderbook_);
     // подготавливаем json order_status
     void        order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result_, bool is_error_ = false, std::string error_ = "");
+    void        order_status_prepare(const s_order& response_, std::string_view action_, std::string_view message_);
     // отправляем order_status
     void        order_status_sender(std::string_view order_status_);
     // проверяет баланс
@@ -152,7 +153,7 @@ private:
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера
-    std::string get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_);
+    order_status get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_);
 
 public:
     // для получения конфига с сервера
