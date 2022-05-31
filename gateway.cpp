@@ -482,6 +482,7 @@ bool gateway::create_public_ws(bss::error& error_) {
             size_t szt = _ftx_ws_public->subscribe_orderbook(market);
             _general_logger->info("Подписываемся на {} в публичном канале. Результат: {}", market, szt);
         }
+        //_ftx_ws_public->subscribe_orderbook("BTC/USDT");
         _sended_orderbook_depth = _work_config.exchange.orderbook_depth;
         return true;
     } catch (const std::exception& err) {
@@ -736,6 +737,7 @@ void gateway::aeron_handler(std::string_view message_) {
                                 std::string_view action;
                                 std::string_view side;
                                 std::string symbol;
+                                std::string type;
                                 //int64_t order_id;
                                 std::string order_id;
                                 double price = 0.0;
@@ -749,6 +751,10 @@ void gateway::aeron_handler(std::string_view message_) {
                                         // получаем рынок
                                         if (auto symbol_element{data_element["symbol"]}; simdjson::SUCCESS == symbol_element.error()) {
                                             symbol = symbol_element.value();
+                                        } else {}
+                                        // получаем тип ордера (limit или market)
+                                        if (auto type_element{data_element["type"]}; simdjson::SUCCESS == type_element.error()) {
+                                            type = type_element.value();
                                         } else {}
                                         // получаем вид сделки
                                         if (auto side_element{data_element["side"].get_string()}; simdjson::SUCCESS == side_element.error()) {
@@ -772,7 +778,7 @@ void gateway::aeron_handler(std::string_view message_) {
                                         }
                                         // выставлен ордер на покупку
                                         else if (action.compare("create_order") == 0) {
-                                            create_order(side, symbol, price, amount);
+                                            create_order(side, symbol, type, price, amount);
                                         } else if (action.compare("get_balances") == 0){
                                             check_balances();
                                         } else if (action.compare("cancel_all_orders") == 0) {
@@ -881,10 +887,10 @@ void gateway::cancel_all_orders() {
 //---------------------------------------------------------------
 // обрабатывает команду на создания ордера
 //---------------------------------------------------------------
-void gateway::create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_) {
+void gateway::create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const double& price_, const double& quantity_) {
     //_error.clear();
     if (side_.compare("buy") == 0) {
-        _general_logger->info("Ядром выставлен ордер на покупку {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
+        _general_logger->info("Ядром выставлен {} ордер на покупку {} с ценой: {} и объёмом {}", type_, symbol_, price_, quantity_);
         // выставляем ордер (синхронно)
         /*std::string place_order_result = _ftx_rest_private->place_order(symbol_, "buy", price_, quantity_, _error);
         if(_error) {
@@ -896,14 +902,19 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
             order_status_prepare("order_created", "Order was created", place_order_result);
         }*/
         // выставляем ордер асинхронно
-        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
-                                               _work_config.account.secret_key,
-                                               _ioc,
-                                               [&](std::string_view message_)
-                 {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "buy", price_, quantity_);
+        if (symbol_.size() != 0 && type_.size() != 0) {
+            std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                   _work_config.account.secret_key,
+                                                   _ioc,
+                                                   [&](std::string_view message_)
+                     {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "buy", type_, price_, quantity_);
+        } else {
+            _errors_logger->error("Неизвестны symbol и type ордера");
+        }
+
     }
     else if (side_.compare("sell") == 0) {
-        _general_logger->info("Ядром выставлен ордер на продажу {} с ценой: {} и объёмом {}", symbol_, price_, quantity_);
+        _general_logger->info("Ядром выставлен {} ордер на продажу {} с ценой: {} и объёмом {}", type_, symbol_, price_, quantity_);
         // выставляем ордер (синхронно)
         /*std::string place_order_result = _ftx_rest_private->place_order(symbol_, "sell", price_, quantity_, _error);
         if(_error) {
@@ -914,11 +925,15 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
             _general_logger->info("Результат выставления ордера на продажу: {}", place_order_result);
             order_status_prepare("order_created", "Order was created", place_order_result);
         }*/
-        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
-                                               _work_config.account.secret_key,
-                                               _ioc,
-                                               [&](std::string_view message_)
-                 {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "sell", price_, quantity_);
+        if (symbol_.size() != 0 && type_.size() != 0) {
+            std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                   _work_config.account.secret_key,
+                                                   _ioc,
+                                                   [&](std::string_view message_)
+                     {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "sell", type_, price_, quantity_);
+        } else {
+            _errors_logger->error("Неизвестны symbol и type ордера");
+        }
     }
 }
 //---------------------------------------------------------------
@@ -1094,7 +1109,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         //double filled;
         //double remaining;
         //int64_t id;
-        std::cout << "from private" << message_ << std::endl;
+        std::cout << "from private_ws_handler" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
@@ -1249,7 +1264,7 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
     // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         // разбираем пришедшее сообщение
-        //std::cout << message_<< std::endl;
+        std::cout << "orderbook" << message_<< std::endl;
         auto result = parser.parse(message_.data(), message_.size(), false);
         // если данные успешно разобрались
         if (simdjson::SUCCESS == result.error()) {
@@ -1461,13 +1476,20 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
                 JSON asks;
                 // получаем итератор на начало map
                 auto begin_map = _direct_itr->second.begin();
-                // вычисляем на сколько можем сместиться
-                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
-                // смещаемся на N
-                std::advance(begin_map, _direct_itr->second.size() - remain_count);
-                //std::cout << " смещаемся на " << direct_itr->second.size() - remain_count << std::endl;
-                for (_asks_itr = begin_map; _asks_itr != _direct_itr->second.end(); _asks_itr++) {
-                    //j_no_init_list.push_back(2);
+//                 так забираем последние предложения (самые ближние с маленькой ценой, а самые дальние с большой ценой)
+//                // вычисляем на сколько можем сместиться
+//                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
+//                // смещаемся на N
+//                std::advance(begin_map, _direct_itr->second.size() - remain_count);
+//                //std::cout << " смещаемся на " << direct_itr->second.size() - remain_count << std::endl;
+//                for (_asks_itr = begin_map; _asks_itr != _direct_itr->second.end(); _asks_itr++) {
+//                    asks.push_back({_asks_itr->first, _asks_itr->second});
+//                }
+                // вычисляем сколько можем забрать (чтобы не выйти за границу)
+                auto how_can_much = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
+                // устанавливаем конец, смещаясь на глубину ордербука
+                auto end_map = std::next(begin_map, how_can_much);
+                for (_asks_itr = begin_map; _asks_itr != end_map; ++_asks_itr) {
                     asks.push_back({_asks_itr->first, _asks_itr->second});
                 }
                 data["asks"] = asks;
@@ -1475,12 +1497,19 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
                 JSON bids;
                 // получаем обратный итератор на начало map
                 auto rbegin_map = _direct_itr->second.rbegin();
-                // вычисляем сможем ли сдвинуть на N элементов
-                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
-                // смещаемся на  (map.size - N)
-                std::advance(rbegin_map, (_direct_itr->second.size() - remain_count));
-                for (_bids_itr = rbegin_map; _bids_itr != _direct_itr->second.rend(); _bids_itr++) {
-                    //j_no_init_list.push_back(2);
+//                // вычисляем сможем ли сдвинуть на N элементов
+//                auto remain_count = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
+//                // смещаемся на  (map.size - N)
+//                std::advance(rbegin_map, (_direct_itr->second.size() - remain_count));
+//                for (_bids_itr = rbegin_map; _bids_itr != _direct_itr->second.rend(); _bids_itr++) {
+//                    //j_no_init_list.push_back(2);
+//                    bids.push_back({_bids_itr->first, _bids_itr->second});
+//                }
+                // вычисляем сколько можем забрать (чтобы не выйти за границу)
+                auto how_can_much = ((_direct_itr->second.size() < _sended_orderbook_depth) ? _direct_itr->second.size() : _sended_orderbook_depth);
+                // устанавливаем конец, смещаясь на глубину ордербука
+                auto end_map = std::next(rbegin_map, how_can_much);
+                for (_bids_itr = rbegin_map; _bids_itr != end_map; ++_bids_itr) {
                     bids.push_back({_bids_itr->first, _bids_itr->second});
                 }
                 data["bids"] = bids;
@@ -1497,6 +1526,7 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
 // отправляет ордербук
 //---------------------------------------------------------------
 void gateway::orderbook_sender(std::string_view orderbook_) {
+    //std::cout << orderbook_.data() << std::endl;
     std::int64_t result = _orderbook_channel->offer(orderbook_.data());
     if (result < 0) {
         processing_error("Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
@@ -1516,7 +1546,7 @@ void gateway::orderbook_sender(std::string_view orderbook_) {
 // callback функция результата выставления оредров
 //---------------------------------------------------------------
 void gateway::place_order_result_handler(std::string_view message_) {
-    //std::cout << message_ << std::endl;
+    //std::cout << "place_order_result_handler: " << message_ << std::endl;
     try {
         // создадим парсер
         simdjson::dom::parser parser;
@@ -1532,13 +1562,19 @@ void gateway::place_order_result_handler(std::string_view message_) {
                 if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
                     // если значения == true, значит ордер выставлен успешно
                     if(element_success.value() == true) {
-                        auto res_value = result["result"];
-                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", res_value);
+                        //auto res_value = result["result"];
+                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", "Успех.");
                     } else if(element_success.value() == false) {
-                        auto err_value = result["error"];
+                        if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
+                            _error.describe(fmt::format("(place_order_result_handler) Ошибка выставления ордера. Причина: {}).", element_error.value()));
+                            _general_logger->error(_error.to_string());
+                            _error.clear();
+                        } else {}
+
+                        /*auto err_value = result["error"];
                         _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
                         _general_logger->error(_error.to_string());
-                        _error.clear();
+                        _error.clear();*/
                     }
                 }
             } else {

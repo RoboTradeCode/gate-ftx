@@ -23,11 +23,11 @@ namespace ftx
     //-----------------------------------------------------------------------
     // выставляет ордер
     //-----------------------------------------------------------------------
-    void AsyncRESTClient::place_order(const std::string market_, const std::string side_, const double& price_, const double& size_) {
+    void AsyncRESTClient::place_order(const std::string market_, const std::string side_, const std::string& type_, const double& price_, const double& size_) {
         JSON payload = {{"market", market_},
                     {"side", side_},
                     {"price", price_},
-                    {"type", "limit"},
+                    {"type", type_},
                     {"size", size_},
                     {"ioc", false},
                     {"postOnly", false},

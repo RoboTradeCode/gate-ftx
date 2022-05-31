@@ -25,6 +25,7 @@ class AsyncRESTClient
     // выставляет ордер
     void place_order(const std::string market_,
                      const std::string side_,
+                     const std::string& tyle_,
                      const double& price_,
                      const double& size_);
     // отменяет все ордера

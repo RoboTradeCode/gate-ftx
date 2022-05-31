@@ -129,7 +129,7 @@ private:
     // обрабатывает и логирует ошибку от каналов aeron
     void        processing_error(std::string_view error_source_, const std::string& prev_messsage_, const std::int64_t& error_code_);
     // создает ордер
-    void        create_order(std::string_view side_, const std::string& symbol_, const double& price_, const double& quantity_);
+    void        create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const double& price_, const double& quantity_);
     // отменяет ордер по order_id
     //void        cancel_order(const int64_t& order_id);
     void        cancel_order(const std::string& order_id_);
