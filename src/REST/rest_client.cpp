@@ -237,7 +237,7 @@ namespace ftx {
             //response = http_client.get("wallet/all_balances");
             //try
             //{
-                //std::cout<<response.body().c_str()<<std::endl;
+                std::cout<<"get_balances: " << response.body().c_str()<<std::endl;
                 simdjson::dom::parser parser;
                 auto &&error_code = parser.allocate(0x1000,0x04);
                 if(simdjson::SUCCESS == error_code)
@@ -250,7 +250,7 @@ namespace ftx {
                         {
                             auto arr = result["result"];
                             //std::cout<<arr<<std::endl;
-                            for(simdjson::dom::object obj:arr)
+                            /*for(simdjson::dom::object obj:arr)
                             {
                                 s_balances_state balanceState;
                                 //std::cout<<obj["coin"]<<" "<<obj["free"]<< " "<<obj["total"]<< ""<< obj["usdValue"]<<std::endl;
@@ -258,9 +258,26 @@ namespace ftx {
                                 balanceState.free     = obj["free"].value();
                                 balanceState.total    = obj["total"].value();
                                 balanceState.usdValue = obj["usdValue"].value();
-    //                            balanceState.coin     = "USDT";
-    //                            balanceState.free     = 238.36f;
                                 balancesVector.push_back(balanceState);
+                            }*/
+                            if (auto result_array{result["result"].get_array()}; simdjson::SUCCESS == result_array.error()) {
+                                for (auto balance : result_array) {
+                                    s_balances_state balanceState;
+                                    if (auto coin_element{balance["coin"].get_string()}; simdjson::SUCCESS == coin_element.error()) {
+                                        balanceState.coin = coin_element.value();
+                                    }
+                                    if (auto free_element{balance["free"].get_double()}; simdjson::SUCCESS == free_element.error()) {
+                                        balanceState.free = free_element.value();
+                                    }
+                                    if (auto total_element{balance["total"].get_double()}; simdjson::SUCCESS == total_element.error()) {
+                                        balanceState.total = total_element.value();
+                                    }
+                                    if (auto usdValue_element{balance["usdValue"].get_double()}; simdjson::SUCCESS == usdValue_element.error()) {
+                                        balanceState.usdValue = usdValue_element.value();
+                                    }
+                                    balancesVector.push_back(balanceState);
+                                }
+
                             }
                         }
                         else

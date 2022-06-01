@@ -1109,8 +1109,8 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         //double filled;
         //double remaining;
         //int64_t id;
-        std::cout << "from private_ws_handler" << message_ << std::endl;
-        //_general_logger->info("(message from private_ws_handler): {}", message_);
+        //std::cout << "from private_ws_handler" << message_ << std::endl;
+        _general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
         // пусть парсер подготовит буфер для своих нужд
@@ -1209,7 +1209,7 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
         if (0 == status_.compare("new")) {
             // выставлен новый ордер
             result_status.description = " Создан ордер на покупку. ";
-            result_status.action      = "create_order";
+            result_status.action      = "order_created";
             result_status.message     = "Order was created";
         } else if (0 == status_.compare("closed")) {
             // ордер был выполнен или отменен
@@ -1229,7 +1229,7 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
         if (0 == status_.compare("new")) {
             // выставлен новый ордер
             result_status.description = " Создан ордер на продажу. ";
-            result_status.action      = "create_order";
+            result_status.action      = "order_created";
             result_status.message     = "Order was created";
         } else if (0 == status_.compare("closed")) {
             // ордер выполнен или отменен
@@ -1264,7 +1264,7 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
     // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         // разбираем пришедшее сообщение
-        std::cout << "orderbook" << message_<< std::endl;
+        //std::cout << "orderbook" << message_<< std::endl;
         auto result = parser.parse(message_.data(), message_.size(), false);
         // если данные успешно разобрались
         if (simdjson::SUCCESS == result.error()) {
@@ -1563,7 +1563,7 @@ void gateway::place_order_result_handler(std::string_view message_) {
                     // если значения == true, значит ордер выставлен успешно
                     if(element_success.value() == true) {
                         //auto res_value = result["result"];
-                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", "Успех.");
+                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", message_);
                     } else if(element_success.value() == false) {
                         if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
                             _error.describe(fmt::format("(place_order_result_handler) Ошибка выставления ордера. Причина: {}).", element_error.value()));
