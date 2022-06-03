@@ -136,6 +136,12 @@ bool gateway::load_config_from_file(bss::error& error_) noexcept {
                     // скорее всего дальше незачем парсить
                     //return false;
                 }
+                // получаем алгоритм
+                if (auto algoritm_element{result["algo"].get_string()}; simdjson::SUCCESS == algoritm_element.error()) {
+                    _work_config.exchange.algo = algoritm_element.value();
+                } else {
+                    error_.describe("При загрузке конфигурации в теле json не найден объект \"algo\".");
+                }
                 // получим рынки, с которыми предстоит работать
                 if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
                     for (auto market : markets_array) {
@@ -279,7 +285,6 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
     auto &&error_code = parser.allocate(0x1000, 0x12);
     // если буфер успешно выделен
-    // если буфер успешно выделен
     if (simdjson::SUCCESS == error_code) {
         auto result = parser.parse(message_.c_str(), message_.size(), false);
         if (simdjson::SUCCESS == result.error()) {
@@ -291,6 +296,12 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
                 //error_.describe("При загрузке конфигурации в теле json не найден оъект is_new.");
                 // скорее всего дальше незачем парсить
                 //return false;
+            }
+            // получаем алгоритм
+            if (auto algoritm_element{result["algo"].get_string()}; simdjson::SUCCESS == algoritm_element.error()) {
+                _work_config.exchange.algo = algoritm_element.value();
+            } else {
+                error_.describe("При загрузке конфигурации в теле json не найден объект \"algo\".");
             }
             // получим рынки, с которыми предстоит работать
             if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
@@ -1010,7 +1021,7 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
     order_status_root["instance"]  = _default_config.exchange.instance;
     order_status_root["action"]    = action_;
     order_status_root["message"]   = message_;
-    order_status_root["algo"]      = "3t_php";
+    order_status_root["algo"]      = _work_config.exchange.algo;
     order_status_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     JSON data;
     {
@@ -1042,7 +1053,7 @@ void gateway::order_status_prepare(const s_order& response_, std::string_view ac
     order_status_root["instance"]  = _default_config.exchange.instance;
     order_status_root["action"]    = action_;
     order_status_root["message"]   = message_;
-    order_status_root["algo"]      = "3t_php";
+    order_status_root["algo"]      = _work_config.exchange.algo;
     order_status_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     JSON data;
     {
@@ -1110,7 +1121,7 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         //double remaining;
         //int64_t id;
         //std::cout << "from private_ws_handler" << message_ << std::endl;
-        _general_logger->info("(message from private_ws_handler): {}", message_);
+        //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
         // пусть парсер подготовит буфер для своих нужд
@@ -1216,7 +1227,7 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
             if ((0 == filled_size_) && (0 == remaining_size_)) {
                 //result_message = " Покупка выполнена. ";
                 result_status.description = " Покупка отменена. ";
-                result_status.action      = "cancel_order";
+                result_status.action      = "order_cancel";
                 result_status.message     = "Order was canceled";
             } else {
                 //result_message = " Покупка отменена. ";
@@ -1236,7 +1247,7 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
             if ((0 == filled_size_) && (0 == remaining_size_)) {
                 //result_message = " Продажа выполнена. ";
                 result_status.description = " Продажа отменена. ";
-                result_status.action      = "cancel_order";
+                result_status.action      = "order_cancel";
                 result_status.message     = "Order was canceled";
             } else {
                 //result_message = " Продажа отменена. ";
@@ -1434,7 +1445,7 @@ void gateway::metric_sender(){
     metric_root["instance"]  = _default_config.exchange.instance;
     metric_root["action"]    = "ping";
     metric_root["message"]   = nullptr;
-    metric_root["algo"]      = "cross_3t_php";
+    metric_root["algo"]      = _work_config.exchange.algo;
     metric_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     metric_root["data"]      = _socket_data_counter;
     int64_t result = _log_channel->offer(metric_root.dump());
@@ -1465,7 +1476,7 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
         orderbook_root["instance"]  = _default_config.exchange.instance;
         orderbook_root["action"]    = "orderbook";
         orderbook_root["message"]   = nullptr;
-        orderbook_root["algo"]      = "signal";
+        orderbook_root["algo"]      = _work_config.exchange.algo;
         orderbook_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         //json_loh j_no_init_list = json_loh::array();
         JSON data;
@@ -1606,7 +1617,7 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
     balance_root["instance"]  = _default_config.exchange.instance;
     balance_root["action"]    = "balances";
     balance_root["message"]   = nullptr;
-    balance_root["algo"]      = "cross_3t_php";
+    balance_root["algo"]      = _work_config.exchange.algo;
     balance_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     JSON data;
     for (auto&& balance: balances_vector_) {

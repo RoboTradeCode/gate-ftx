@@ -21,10 +21,12 @@ struct gate_config
     {
         // имя биржы
         std::string name;
-        int         instance;
         std::string node;
+        std::string algo;
         // глубина стакана
         int orderbook_depth;
+        int         instance;
+        // пинг метрик
         int         ping_delay;
     } exchange;
     // ключи
