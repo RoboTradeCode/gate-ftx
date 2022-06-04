@@ -227,9 +227,9 @@ namespace ftx {
     //----------------------------------------------------------
     // получает балансы
     //----------------------------------------------------------
-    std::vector<s_balances_state> RESTClient::get_balances(bss::error& error_)
+    std::map<std::string, s_balances_state> RESTClient::get_balances(bss::error& error_)
     {
-        std::vector<s_balances_state> balancesVector;
+        std::map<std::string, s_balances_state> balancesVector;
         http::response<http::string_body> response;
         try
         {
@@ -249,17 +249,6 @@ namespace ftx {
                         if(element_success.value() == true)
                         {
                             auto arr = result["result"];
-                            //std::cout<<arr<<std::endl;
-                            /*for(simdjson::dom::object obj:arr)
-                            {
-                                s_balances_state balanceState;
-                                //std::cout<<obj["coin"]<<" "<<obj["free"]<< " "<<obj["total"]<< ""<< obj["usdValue"]<<std::endl;
-                                balanceState.coin     = obj["coin"].value();
-                                balanceState.free     = obj["free"].value();
-                                balanceState.total    = obj["total"].value();
-                                balanceState.usdValue = obj["usdValue"].value();
-                                balancesVector.push_back(balanceState);
-                            }*/
                             if (auto result_array{result["result"].get_array()}; simdjson::SUCCESS == result_array.error()) {
                                 for (auto balance : result_array) {
                                     s_balances_state balanceState;
@@ -275,9 +264,9 @@ namespace ftx {
                                     if (auto usdValue_element{balance["usdValue"].get_double()}; simdjson::SUCCESS == usdValue_element.error()) {
                                         balanceState.usdValue = usdValue_element.value();
                                     }
-                                    balancesVector.push_back(balanceState);
+                                   // balancesVector.push_back(balanceState);
+                                    balancesVector[balanceState.coin] = balanceState;
                                 }
-
                             }
                         }
                         else

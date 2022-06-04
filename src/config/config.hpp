@@ -12,6 +12,8 @@ struct gate_config
 {
     // список рынков
     std::vector<std::string> _markets;
+    // список ассетов
+    std::vector<std::string> _assets;
 
     std::string source;
     std::string config_uri;
@@ -25,7 +27,7 @@ struct gate_config
         std::string algo;
         // глубина стакана
         int orderbook_depth;
-        int         instance;
+        std::string instance;
         // пинг метрик
         int         ping_delay;
     } exchange;

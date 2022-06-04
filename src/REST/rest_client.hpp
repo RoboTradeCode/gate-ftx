@@ -37,7 +37,7 @@ class RESTClient
     // отменяет ордер по идентификатору
     std::string cancel_order(const std::string& order_id_, bss::error& error_);
     // получает балансы
-    std::vector<s_balances_state> get_balances(bss::error& error_);
+    std::map<std::string, s_balances_state> get_balances(bss::error& error_);
 
   private:
     util::HTTPSession _http_client;

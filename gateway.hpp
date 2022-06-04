@@ -50,6 +50,7 @@ private:
     std::shared_ptr<spdlog::logger>  _pingpong_logger;
     std::shared_ptr<spdlog::logger>  _balances_logger;
     std::shared_ptr<spdlog::logger>  _errors_logger;
+    std::shared_ptr<spdlog::logger>  _orders_logger;
     //std::shared_ptr<ftx::AsyncRESTClient> ftx;
 
     // константы ошибок aeron
@@ -77,6 +78,9 @@ private:
     map<string, map<double, double>>::const_iterator                                      _direct_itr;
     map<double, double>::const_iterator                                                   _asks_itr;
     map<double, double>::const_reverse_iterator                                           _bids_itr;
+
+    // список ассетов из конфига
+    //std::vector<std::string> _assets_from_config;
 
     // содержит дефолтную конфигурацию
     gate_config                _default_config;
@@ -142,14 +146,16 @@ private:
     // отправляем стакан
     void        orderbook_sender(std::string_view orderbook_);
     // подготавливаем json order_status
-    void        order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result_, bool is_error_ = false, std::string error_ = "");
+//    void        order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result_, bool is_error_ = false, std::string error_ = "");
     void        order_status_prepare(const s_order& response_, std::string_view action_, std::string_view message_);
     // отправляем order_status
     void        order_status_sender(std::string_view order_status_);
-    // проверяет баланс
-    void        check_balances(/*const bool& start_trigger_ = false*/);
+    // проверяет баланс (вектор может содержать список ассетов от биржы или список ассетов из конфига)
+    void        check_balances(const std::vector<std::string>& assets_);
     // отправляет баланс
-    void        balance_sender(const std::vector<s_balances_state>& balances_vector_);
+    void        balance_sender(const std::map<std::string, s_balances_state>& balances_map_);
+    // отправляет сообщение в лог сервер
+    void        log_sender(const std::string& action_, std::string_view message_);
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера

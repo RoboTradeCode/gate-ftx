@@ -11,7 +11,8 @@ gateway::gateway(const std::string& config_file_path_)
    _logs_logger(spdlog::get("logs")),
    _pingpong_logger(spdlog::get("pingpong")),
    _balances_logger(spdlog::get("balances")),
-   _errors_logger(spdlog::get("errors"))
+   _errors_logger(spdlog::get("errors")),
+   _orders_logger(spdlog::get("orders"))
 {
     _general_logger->info("Starting...");
 
@@ -20,7 +21,9 @@ gateway::gateway(const std::string& config_file_path_)
     _default_config = parse_config(config_file_path_);
 
     /*std::string_view mess = "{\"event\":\"command\",\"exchange\":\"ftx\",\"node\":\"core\",\"instance\": \"cross_2t\",\"action\":\"cancel_order\",\"message\":null,\"algo\":\"yobit_3t_php\",\"timestamp\":1644489501367487,\"data\":[{\"id\":\"86579506507056097\",\"symbol\":\"BTC/USDT\"},{\"id\":\"86579506507056044\",\"symbol\":\"ETH/USDT\"}]}";
-    //std::string_view mess  = "{\"event\":\"command\",\"exchange\":\"ftx\",\"node\":\"core\",\"instance\": \"cross_2t\",\"action\":\"create_order\",\"message\":null,\"algo\":\"cross_2t_php\",\"timestamp\":1644489501367593,\"data\":[{\"symbol\":\"BTC/USDT\",\"type\":\"limit\",\"side\":\"sell\",\"price\":41500.34,\"amount\":0.023},{\"symbol\":\"ETH/USDT\",\"type\":\"limit\",\"side\":\"sell\",\"price\":41500.34,\"amount\":0.023}]}";
+    //std::string_view mess  = "{\"event\":\"command\",\"exchange\":\"ftx\",\"node\":\"core\",\"instance\": \"cross_2t\",\"action\":\"create_order\",\"message\":null,\"algo\":\"cross_2t_php\",\"timestamp\":1644489501367593,\"data\":[{\"symbol\":\"BTC/USDT\",\"type\":\"limit\",\"side\":\"sell\",\"price\":41500.34,\"amount\":0.023},{\"symbol\":\"ETH/USDT\",\"type\":\"limit\",\"side\":\"sell\",\"price\":41500.34,\"amount\":0.023}]}";*/
+    /*std::string_view mess = "{\"event\":\"command\",\"exchange\":\"ftx\",\"node\":\"core\",\"instance\": \"1\",\"action\":\"get_balances\",\"message\":\"\",\"algo\":\"multi_3t_php\",\"timestamp\":1654266608139585,\"data\":{\"assets\":[\"ETH\",\"BTC\",\"LTC\",\"USDT\"]}}";
+
     aeron_handler(mess);*/
 }
 //--------------------------------------------------------
@@ -156,6 +159,20 @@ bool gateway::load_config_from_file(bss::error& error_) noexcept {
                 } else {
                     error_.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
                 }
+                _work_config._assets.clear();
+                // получим ассеты, с которыми предстоит работать
+                if (auto assets_array{result["data"]["assets_labels"].get_array()}; simdjson::SUCCESS == assets_array.error()) {
+                    for (auto asset : assets_array) {
+                        //_assets_from_config.push_back(std::string(asset.get_string().value()));
+                        if (auto common_element{asset["common"].get_c_str()}; simdjson::SUCCESS == common_element.error()) {
+                            _work_config._assets.push_back(common_element.value());
+                        } else {
+                            error_.describe("При загрузке конфигурации в теле json не найден объект [\"assets_labels\"][\"common\"].");
+                        }
+                    }
+                } else {
+                    error_.describe("При загрузке конфигурации в теле json не найден объект \"assets_labels\".");
+                }
                 // получим часть пути для сокращения полного пути до элементов
                 if (auto cfg = result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
                     // получаем имя биржи
@@ -165,7 +182,7 @@ bool gateway::load_config_from_file(bss::error& error_) noexcept {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                     }
                     // получаем instance
-                    if (auto instance_element{cfg["info"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
+                    if (auto instance_element{cfg["info"]["instance"].get_string()}; simdjson::SUCCESS == instance_element.error()) {
                         _work_config.exchange.instance = instance_element.value();
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
@@ -280,6 +297,7 @@ bool gateway::load_config_from_file(bss::error& error_) noexcept {
 // загружает конфиг из json
 //---------------------------------------------------------------
 bool gateway::load_config_from_json(const std::string& message_, bss::error &error_) noexcept{
+    //std::cout << message_ << std::endl;
     // создаём парсер
     simdjson::dom::parser parser;
     // скажем парсеру, чтобы он подготовил буфер для своих внутренних нужд (если будет меньше 0x08, то будет ошибка)
@@ -307,8 +325,6 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
             if (auto markets_array{result["data"]["markets"].get_array()}; simdjson::SUCCESS == markets_array.error()){
                 for (auto market : markets_array) {
                     if (auto common_symbol_element{market["common_symbol"].get_c_str()}; simdjson::SUCCESS == common_symbol_element.error()) {
-                        //std::cout << common_symbol_element.value() << std::endl;
-                        //std::string_view mrk = common_symbol_element.value();
                         _work_config._markets.push_back(common_symbol_element.value());
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден объект \"common_symbol\".");
@@ -316,6 +332,20 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
                 }
             } else {
                 error_.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
+            }
+            _work_config._assets.clear();
+            // получим ассеты, с которыми предстоит работать
+            if (auto assets_array{result["data"]["assets_labels"].get_array()}; simdjson::SUCCESS == assets_array.error()) {
+                for (auto asset : assets_array) {
+                    //_assets_from_config.push_back(std::string(asset.get_string().value()));
+                    if (auto common_element{asset["common"].get_c_str()}; simdjson::SUCCESS == common_element.error()) {
+                        _work_config._assets.push_back(common_element.value());
+                    } else {
+                        error_.describe("При загрузке конфигурации в теле json не найден объект [\"assets_labels\"][\"common\"].");
+                    }
+                }
+            } else {
+                error_.describe("При загрузке конфигурации в теле json не найден объект \"assets_labels\".");
             }
             // получим часть пути для сокращения полного пути до элементов
             if (auto cfg = result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
@@ -326,7 +356,7 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
                     error_.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                 }
                 // получаем instance
-                if (auto instance_element{cfg["info"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
+                if (auto instance_element{cfg["info"]["instance"].get_string()}; simdjson::SUCCESS == instance_element.error()) {
                     _work_config.exchange.instance = instance_element.value();
                 } else {
                     error_.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
@@ -604,6 +634,20 @@ void gateway::config_from_agent_handler(std::string_view message_) {
             } else {
                 _error.describe("При загрузке конфигурации в теле json не найден объект \"maktets\".");
             }
+            _work_config._assets.clear();
+            // получим ассеты, с которыми предстоит работать
+            if (auto assets_array{parse_result["data"]["assets_labels"].get_array()}; simdjson::SUCCESS == assets_array.error()) {
+                for (auto asset : assets_array) {
+                    //_assets_from_config.push_back(std::string(asset.get_string().value()));
+                    if (auto common_element{asset["common"].get_c_str()}; simdjson::SUCCESS == common_element.error()) {
+                        _work_config._assets.push_back(common_element.value());
+                    } else {
+                        _error.describe("При загрузке конфигурации в теле json не найден объект [\"assets_labels\"][\"common\"].");
+                    }
+                }
+            } else {
+                _error.describe("При загрузке конфигурации в теле json не найден объект \"assets_labels\".");
+            }
             // получим часть пути для сокращения полного пути до элементов
             if (auto cfg = parse_result["data"]["configs"]["gate_config"]; simdjson::SUCCESS == cfg.error()) {
                 // получаем имя биржи
@@ -613,7 +657,7 @@ void gateway::config_from_agent_handler(std::string_view message_) {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"name\".");
                 }
                 // получаем instance
-                if (auto instance_element{cfg["info"]["instance"].get_int64()}; simdjson::SUCCESS == instance_element.error()) {
+                if (auto instance_element{cfg["info"]["instance"].get_string()}; simdjson::SUCCESS == instance_element.error()) {
                     _work_config.exchange.instance = instance_element.value();
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"instance\".");
@@ -790,10 +834,12 @@ void gateway::aeron_handler(std::string_view message_) {
                                         // выставлен ордер на покупку
                                         else if (action.compare("create_order") == 0) {
                                             create_order(side, symbol, type, price, amount);
-                                        } else if (action.compare("get_balances") == 0){
-                                            check_balances();
+                                            _orders_logger->info(message_);
+                                        //} else if (action.compare("get_balances") == 0){
+                                        //    check_balances();
                                         } else if (action.compare("cancel_all_orders") == 0) {
                                             cancel_all_orders();
+                                            _orders_logger->info(message_);
                                         } else {
                                             //_error.describe("Не могу распознать action и side в команде от ядра {}.", message_);
                                             _general_logger->error("Не могу распознать action и side в команде от ядра {}.", message_.data());
@@ -801,9 +847,18 @@ void gateway::aeron_handler(std::string_view message_) {
                                     }
                                 } else {
                                     if (action.compare("get_balances") == 0) {
-                                        check_balances();
+                                        if (auto assets_element_array{parse_result["data"]["assets"].get_array()}; simdjson::SUCCESS == assets_element_array.error()) {
+                                            // получим asset-ы, по которым нужно получить баланс
+                                            std::vector<std::string> assets_from_command;
+                                            for (auto asset : assets_element_array) {
+                                                assets_from_command.push_back(std::string(asset.get_string().value()));
+                                            }
+                                            // при получении команды на получение баланса от ядра ассеты берем из команды
+                                            check_balances(assets_from_command);
+                                        }
                                     } else if (action.compare("cancel_all_orders") == 0) {
                                         cancel_all_orders();
+                                        _orders_logger->info(message_);
                                     } else {
                                         //_error.describe(fmt::format("Не могу получить массив данных data {}.", message_.data()));
                                         _general_logger->error("Не могу получить массив данных data {}.", message_.data());
@@ -920,7 +975,7 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
                                                    [&](std::string_view message_)
                      {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "buy", type_, price_, quantity_);
         } else {
-            _errors_logger->error("Неизвестны symbol и type ордера");
+            _errors_logger->error("Неизвестные symbol и type ордера");
         }
 
     }
@@ -943,14 +998,14 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
                                                    [&](std::string_view message_)
                      {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "sell", type_, price_, quantity_);
         } else {
-            _errors_logger->error("Неизвестны symbol и type ордера");
+            _errors_logger->error("Неизвестные symbol и type ордера");
         }
     }
 }
 //---------------------------------------------------------------
 // подготавливаем json order_status
 //---------------------------------------------------------------
-void gateway::order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result_, bool is_error_, std::string error_) {
+/*void gateway::order_status_prepare(std::string_view action_, std::string_view message_, std::string_view place_result_, bool is_error_, std::string error_) {
     std::string_view event{"data"};
     std::string_view id;
     std::string_view status;
@@ -1039,7 +1094,7 @@ void gateway::order_status_prepare(std::string_view action_, std::string_view me
     order_status_root["data"] = data;
     // отправляем информацию в ядро
     order_status_sender(order_status_root.dump());
-}
+}*/
 //---------------------------------------------------------------
 // подготавливаем json order_status
 //---------------------------------------------------------------
@@ -1048,9 +1103,9 @@ void gateway::order_status_prepare(const s_order& response_, std::string_view ac
     JSON order_status_root;
     //order_status_root["event"]     = event;
     order_status_root["event"]     = "data";
-    order_status_root["exchange"]  = _default_config.exchange.name;
+    order_status_root["exchange"]  = _work_config.exchange.name;
     order_status_root["node"]      = _work_config.exchange.node;
-    order_status_root["instance"]  = _default_config.exchange.instance;
+    order_status_root["instance"]  = _work_config.exchange.instance;
     order_status_root["action"]    = action_;
     order_status_root["message"]   = message_;
     order_status_root["algo"]      = _work_config.exchange.algo;
@@ -1078,7 +1133,9 @@ void gateway::order_status_prepare(const s_order& response_, std::string_view ac
 void gateway::order_status_sender(std::string_view order_status_) {
     std::int64_t result = _order_status_channel->offer(order_status_.data());
     if (result < 0) {
-        processing_error("Ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации о статусе ордера в ядро: ", _prev_order_status_message_core, result);
         if (result == -3) {
             // пробуем еще раз
             result = _order_status_channel->offer(order_status_.data());
@@ -1092,7 +1149,9 @@ void gateway::order_status_sender(std::string_view order_status_) {
     // теперь отравим все это дело в лог
     result = _log_channel->offer(order_status_.data());
     if (result < 0) {
-        processing_error("Ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации о статусе ордера в лог: ", _prev_order_status_message_log, result);
         if (result == -3) {
             // пробуем отправить еще раз
             result = _log_channel->offer(order_status_.data());
@@ -1115,12 +1174,6 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
         return;
     } else {}
     try {
-        //std::string_view side;
-        //std::string_view status;
-        //double filled;
-        //double remaining;
-        //int64_t id;
-        //std::cout << "from private_ws_handler" << message_ << std::endl;
         //_general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
@@ -1168,17 +1221,12 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
                         if (auto element_symbol{result["data"]["market"].get_string()}; simdjson::SUCCESS == element_symbol.error()) {
                             response.symbol = element_symbol.value();
                         } else {}
-                        //std::string_view element_side{result["data"]["side"].get_string()};
-                        //std::string_view element_status{result["data"]["status"].get_string()};
-                        //double element_filled{result["data"]["filledSize"].get_double()};
-                        //double element_remaining{result["data"]["remainingSize"].get_double()};
-                        //int64_t element_id{result["data"]["id"].get_int64()};
                         order_status order_status = get_order_change_description(response.side, response.status, response.filled, response.remaining);
                         _general_logger->info("(ws private) произошли изменения в ордерах: {} object_id = {} id: {} side: {} status: {} filledSize: {} remainingSize: {}",
                                               order_status.description, id_, response.id, response.side, response.status, response.filled, response.remaining);
                         order_status_prepare(response, order_status.action, order_status.message);
-                        // проверяем и отправляем баланс
-                        check_balances();
+                        // проверяем и отправляем баланс (ассеты берем из кофига)
+                        check_balances(_work_config._assets);
 
                     } else {
                         if (element_type.value().compare("subscribed") != 0) {
@@ -1232,6 +1280,8 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
             } else {
                 //result_message = " Покупка отменена. ";
                 result_status.description = " Покупка выполнена. ";
+                result_status.action      = "order_cancel";
+                result_status.message     = "Order was filled";
             }
         } else {
             result_status.description = " Неопределенный статус в ордере buy. ";
@@ -1252,6 +1302,8 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
             } else {
                 //result_message = " Продажа отменена. ";
                 result_status.description = " Продажа выполнена. ";
+                result_status.action      = "order_cancel";
+                result_status.message     = "Order was filled";
             }
         }
     } else {
@@ -1440,9 +1492,9 @@ void gateway::public_ws_handler(std::string_view message_, void* id_) {
 void gateway::metric_sender(){
     JSON metric_root;
     metric_root["event"]     = "info";
-    metric_root["exchange"]  = _default_config.exchange.name;
+    metric_root["exchange"]  = _work_config.exchange.name;
     metric_root["node"]      = _work_config.exchange.node;
-    metric_root["instance"]  = _default_config.exchange.instance;
+    metric_root["instance"]  = _work_config.exchange.instance;
     metric_root["action"]    = "ping";
     metric_root["message"]   = nullptr;
     metric_root["algo"]      = _work_config.exchange.algo;
@@ -1450,7 +1502,9 @@ void gateway::metric_sender(){
     metric_root["data"]      = _socket_data_counter;
     int64_t result = _log_channel->offer(metric_root.dump());
     if (result < 0) {
-        processing_error("Ошибка отправки метрики в лог: ", _prev_metric_message, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки метрики в лог: ", _prev_metric_message, result);
         if (result == -3) {
             // отправляем еще раз
             result = _log_channel->offer(metric_root.dump());
@@ -1471,9 +1525,9 @@ void gateway::orderbook_prepare(const map<string, map<string, map<double, double
     for (_market_itr = markets_map_.begin(); _market_itr != markets_map_.end(); ++_market_itr) {
         JSON orderbook_root;
         orderbook_root["event"]     = "data";
-        orderbook_root["exchange"]  = _default_config.exchange.name;
+        orderbook_root["exchange"]  = _work_config.exchange.name;
         orderbook_root["node"]      = _work_config.exchange.node;
-        orderbook_root["instance"]  = _default_config.exchange.instance;
+        orderbook_root["instance"]  = _work_config.exchange.instance;
         orderbook_root["action"]    = "orderbook";
         orderbook_root["message"]   = nullptr;
         orderbook_root["algo"]      = _work_config.exchange.algo;
@@ -1540,7 +1594,9 @@ void gateway::orderbook_sender(std::string_view orderbook_) {
     //std::cout << orderbook_.data() << std::endl;
     std::int64_t result = _orderbook_channel->offer(orderbook_.data());
     if (result < 0) {
-        processing_error("Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации об ордербуке в ядро: ", _prev_orderbook_message, result);
         if (result == -3) {
             result = _orderbook_channel->offer(orderbook_.data());
             if (result < 0) {
@@ -1568,17 +1624,20 @@ void gateway::place_order_result_handler(std::string_view message_) {
             // разбираем строку
             auto result = parser.parse(message_.data(), message_.size(), false);
             // если данные успешно разобрались
-            if(simdjson::SUCCESS == result.error()){
+            if(simdjson::SUCCESS == result.error()) {
                 // получаем значение поля success
                 if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
                     // если значения == true, значит ордер выставлен успешно
                     if(element_success.value() == true) {
                         //auto res_value = result["result"];
-                        _general_logger->info("(order_result_handler) Результат выставления ордера: {}", message_);
+                        _general_logger->info("(place_order_result_handler) Результат выставления ордера: {}", message_);
                     } else if(element_success.value() == false) {
                         if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
                             _error.describe(fmt::format("(place_order_result_handler) Ошибка выставления ордера. Причина: {}).", element_error.value()));
                             _general_logger->error(_error.to_string());
+                            // отправим ошибку в лог сервер
+                            log_sender("order_created", element_error.value());
+                            // удалим ошибки
                             _error.clear();
                         } else {}
 
@@ -1608,31 +1667,37 @@ void gateway::place_order_result_handler(std::string_view message_) {
 //---------------------------------------------------------------
 // отправляет в ядро информацию о балансе
 //---------------------------------------------------------------
-void gateway::balance_sender(const std::vector<s_balances_state>& balances_vector_) {
+void gateway::balance_sender(const std::map<std::string, s_balances_state>& balances_map_) {
 
     JSON balance_root;
     balance_root["event"]     = "data";
-    balance_root["exchange"]  = _default_config.exchange.name;
+    balance_root["exchange"]  = _work_config.exchange.name;
     balance_root["node"]      = _work_config.exchange.node;
-    balance_root["instance"]  = _default_config.exchange.instance;
+    balance_root["instance"]  = _work_config.exchange.instance;
     balance_root["action"]    = "balances";
     balance_root["message"]   = nullptr;
     balance_root["algo"]      = _work_config.exchange.algo;
     balance_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     JSON data;
-    for (auto&& balance: balances_vector_) {
+    for (auto&& balance: balances_map_) {
         JSON asset;
-        asset["free"]  = balance.free;
-        asset["used"]  = (balance.total - balance.free);
-        asset["total"] = balance.total;
-        data[balance.coin] = asset;
+//        asset["free"]  = balance.free;
+//        asset["used"]  = (balance.total - balance.free);
+//        asset["total"] = balance.total;
+//        data[balance.coin] = asset;
+        asset["free"]  = balance.second.free;
+        asset["used"]  = (balance.second.total - balance.second.free);
+        asset["toral"] = balance.second.total;
+        data[balance.first] = asset;
     }
     balance_root["data"] = data;
     //отправляем json в aeron
     //std::cout << balance_root.dump() << std::endl;
     std::int64_t result = _balance_channel->offer(balance_root.dump());
     if (result < 0) {
-        processing_error("Ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации о балансе в ядро: ", _prev_balance_message_core, result);
         if (result == -3) {
             // отправляем еще раз
             result = _balance_channel->offer(balance_root.dump());
@@ -1649,12 +1714,14 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
     // теперь отравим все это дело в лог
     result = _log_channel->offer(balance_root.dump());
     if (result < 0) {
-        processing_error("error: Ошибка отправки информации о балансах в лог: ", _prev_balance_message_log, result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации о балансах в лог: ", _prev_balance_message_log, result);
         if (result == -3) {
             // отправляем еще раз
             result = _log_channel->offer(balance_root.dump());
             if (result < 0) {
-                processing_error("Повторная ошибка отправки информации о балансах в ядро: ", _prev_balance_message_log, result);
+                processing_error("Повторная ошибка отправки информации о балансах в лог: ", _prev_balance_message_log, result);
             }
         }
     } else {
@@ -1662,26 +1729,65 @@ void gateway::balance_sender(const std::vector<s_balances_state>& balances_vecto
         // запомним предыдущее сообщение
         _prev_balance_message_log = fmt::format("Результат: {}. Сообщение: {}", result, balance_root.dump());
     }
-
 }
+//---------------------------------------------------------------
+// отправляет сообщение в лог сервер
+//---------------------------------------------------------------
+void gateway::log_sender(const std::string& action_, std::string_view message_){
+
+    JSON log_root;
+    log_root["event"]     = "error";
+    log_root["exchange"]  = _work_config.exchange.name;
+    log_root["node"]      = _work_config.exchange.node;
+    log_root["instance"]  = _work_config.exchange.instance;
+    log_root["action"]    = action_;
+    log_root["message"]   = message_;
+    log_root["algo"]      = _work_config.exchange.algo;
+    log_root["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    log_root["data"]      = nullptr;
+    // теперь отравим все это дело в лог
+    std::int64_t result = _log_channel->offer(log_root.dump());
+    if (result < 0) {
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки информации об ошибки в лог: ", "none", result);
+        if (result == -3) {
+            // отправляем еще раз
+            result = _log_channel->offer(log_root.dump());
+            if (result < 0) {
+                processing_error("Повторная ошибка отправки информации о балансах в лог: ", "none", result);
+            }
+        }
+    } else {
+        _logs_logger->info(log_root.dump());
+    }
+}
+
 //---------------------------------------------------------------
 // проверяет баланс
 //---------------------------------------------------------------
-void gateway::check_balances() {
+void gateway::check_balances(const std::vector<std::string>& assets_) {
     _error.clear();
     // получаем баланс
-    std::vector<s_balances_state> balances_vector = _ftx_rest_private->get_balances(_error);
+    std::map<std::string, s_balances_state> balances_map = _ftx_rest_private->get_balances(_error);
     // если вектор нулевого размера, значит была какая-то ошибка и баланс мы не получили
-    if(balances_vector.empty()){
-        if(_error){
+    if (balances_map.empty()) {
+        if (_error) {
             _error.describe("Ошибка получения баланса (get_balances).");
             _general_logger->error(_error.to_string());
             _error.clear();
         } else {}
-    }
-    else{
+    } else {
+        // проверим, все ли ассеты вернула биржа
+        for (auto& asset : assets_) {
+            auto find_asset_result = balances_map.find(asset);
+            if (find_asset_result == balances_map.end()) {
+                // если такого ассета нет, то вставим данные
+                balances_map[asset] = s_balances_state{asset, 0.0, 0.0, 0.0};
+            }
+        }
         // отправляем баланс в ядро
-        balance_sender(balances_vector);
+        balance_sender(balances_map);
     }
 }
 //---------------------------------------------------------------
@@ -1763,7 +1869,9 @@ void gateway::get_full_config_request() {
 
     std::int64_t result = _publisher_agent_channel->offer(full_cfg_request.dump());
     if (result < 0) {
-        processing_error("Ошибка отправки запроса получения полного конфига: ", "none", result);
+        // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
+        if (result != -3)
+            processing_error("Ошибка отправки запроса получения полного конфига: ", "none", result);
         // функция get_full_config_request вызывается в самом начале и у нас все должно быть девственно чисто, но все-равно проверим на "-3"
         if (result == -3) {
             result = _publisher_agent_channel->offer(full_cfg_request.dump());

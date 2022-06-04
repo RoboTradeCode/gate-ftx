@@ -18,18 +18,6 @@ struct s_balances_state{
     double usdValue;
 };
 
-/*struct STicker{
-    // тикерный символ
-    std::string s;
-    // bid, цена лучшей заявки на покупку
-    std::string b;
-    // объём лучшей заявки на покупку
-    std::string B;
-    // ask, цена лучшей заявки на продажу
-    std::string a;
-    // объём лучшей заявки на продажу
-    std::string A;
-};*/
 struct s_order{
     // время создания оредра
     std::string createdAt;
@@ -61,15 +49,7 @@ struct order_status {
     // сообщение (не регламентировано)
     std::string message;
 };
+//
 
-/*struct SCurrencyCharacteristics
-{
-    // шаг объёма
-    double priceIncrement;
-    // шаг цены
-    double sizeIncrement;
-    int    pricePrecision;
-    int    sizePrecision;
-};*/
 
 #endif // DECL_HEADER_H

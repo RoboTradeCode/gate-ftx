@@ -22,7 +22,7 @@ gate_config parse_config(const std::string& config_file_path_){
 
     // получаем имя и инстанс
     config.exchange.name     = gate["exchange_name"].value_or("ftx");
-    config.exchange.instance = gate["instance_name"].value_or(0);
+    config.exchange.instance = gate["instance_name"].value_or("0");
 
     config.source            = configurator["source"].value_or("unknown");
 
