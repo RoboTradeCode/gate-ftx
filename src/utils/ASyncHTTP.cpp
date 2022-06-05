@@ -168,7 +168,7 @@ void AsyncHTTPSession::authenticate(http::request<http::string_body>& req) {
     req.set("FTX-KEY", api_key_);
     req.set("FTX-TS", std::to_string(ts));
     req.set("FTX-SIGN", sign);
-    //req.set("FTX-SUBACCOUNT", "SecondAcc");
+    req.set("FTX-SUBACCOUNT", "SecondAcc");
 
 }
 void AsyncHTTPSession::fail(beast::error_code ec, char const* what) {

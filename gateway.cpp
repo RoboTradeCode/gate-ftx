@@ -553,6 +553,8 @@ bool gateway::create_private_ws(bss::error& error_) {
         }
         // похоже надо просто подписываться на канал для всех рынков
         _ftx_ws_private->subscribe_order();
+        _general_logger->info(_work_config.account.api_key);
+        _general_logger->info(_work_config.account.secret_key);
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
