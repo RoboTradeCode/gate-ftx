@@ -78,16 +78,31 @@ namespace ftx {
                 std::string data = std::to_string(ts) + "websocket_login";
                 std::string hmacced = encoding::hmac(std::string(m_api_secret), data, 32);
                 std::string sign = encoding::str_to_hex((unsigned char*)hmacced.c_str(), 32);
-                return ws->write(json::serialize(json::value{
-                                              {"op", "login"},
-                                              {"args",
-                                              {
-                                                  {"key", m_api_key},
-                                                  {"sign", sign},
-                                                  {"time", ts}
-                                              }
-                                              }
-                                          }));
+                if (m_subaccount_name.empty()) {
+                    return ws->write(json::serialize(json::value{
+                                                  {"op", "login"},
+                                                  {"args",
+                                                  {
+                                                      {"key", m_api_key},
+                                                      {"sign", sign},
+                                                      {"time", ts}
+                                                  }
+                                                  }
+                                              }));
+                } else {
+                    return ws->write(json::serialize(json::value{
+                                                  {"op", "login"},
+                                                  {"args",
+                                                  {
+                                                      {"key", m_api_key},
+                                                      {"sign", sign},
+                                                      {"time", ts},
+                                                      {"subaccount", "SecondAcc"}
+                                                  }
+                                                  }
+                                              }));
+                }
+
             }
         }
         catch(std::exception& ex){

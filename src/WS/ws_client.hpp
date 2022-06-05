@@ -35,6 +35,7 @@ namespace ftx
     private:
         std::string m_api_key;
         std::string m_api_secret;
+        std::string m_subaccount_name = "SecondAcc";
     };
 }
 #endif

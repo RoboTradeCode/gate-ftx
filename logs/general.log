@@ -1,0 +1,37 @@
+[2022-06-05 20:19:24.708] [general] [info] Starting...
+[2022-06-05 20:19:25.368] [general] [info] Конфигурация получена с сервера.
+[2022-06-05 20:19:25.470] [general] [error] Канал для отправки статуса ордеров не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+ Канал для отправки ордербуков не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+Канал для отправки балансов не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+[2022-06-05 20:20:04.312] [general] [info] Starting...
+[2022-06-05 20:20:05.281] [general] [info] Конфигурация получена с сервера.
+[2022-06-05 20:20:05.388] [general] [error] Канал для отправки статуса ордеров не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+ Канал для отправки ордербуков не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+Канал для отправки балансов не создан: (99) Cannot assign requested address
+[aeron_udp_channel_transport_init, aeron_udp_channel_transport.c:121] unicast bind(172.31.4.173:40456)
+[aeron_send_channel_endpoint_create, aeron_send_channel_endpoint.c:102] uri=aeron:udp?control=172.31.4.173:40456|control-mode=dynamic
+
+[2022-06-05 20:23:18.031] [general] [info] Starting...
+[2022-06-05 20:23:18.724] [general] [info] Конфигурация получена с сервера.
+[2022-06-05 20:23:20.669] [general] [info] upxDh4reRUPNvRfv1EJV8b1-IBFPlWWYdDy8vPG4
+[2022-06-05 20:23:20.669] [general] [info] z2DOk75y0vV-IvexShd8bC46qSHogl0br8t54d3W
+[2022-06-05 20:23:22.147] [general] [info] Подписываемся на BTC/USDT в публичном канале. Результат: 60
+[2022-06-05 20:23:22.147] [general] [info] Подписываемся на ETH/BTC в публичном канале. Результат: 59
+[2022-06-05 20:23:22.147] [general] [info] Подписываемся на ETH/USDT в публичном канале. Результат: 60
+[2022-06-05 20:23:22.147] [general] [error] json не содержит поле "update". json body: {"type":"error","code":400,"msg":"Only have permissions for subaccount SecondAcc"}
+[2022-06-05 20:23:22.148] [general] [error] json не содержит поле "update". json body: {"type":"error","code":400,"msg":"Not logged in"}
