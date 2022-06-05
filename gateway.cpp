@@ -458,7 +458,7 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
     }
     if (not error_) {
         // если не было ошибок, то считаем, что конфиг получен
-        _config_was_received = true;
+        std::cout << message_ << std::endl;
         return true;
     }
     else
@@ -1909,6 +1909,7 @@ std::string gateway::get_config_source(){
 //---------------------------------------------------------------
 bool gateway::get_config_from_api(bss::error& error_) {
     // делаем get запрос (параметры уже должны быть получены)
+    std::cout << _default_config.config_uri << "  " << _default_config.config_target << std::endl;
     http::response<http::string_body> response = http_session.get_config(_default_config.config_uri, _default_config.config_target);
     return load_config_from_json(response.body(), error_);
 }
