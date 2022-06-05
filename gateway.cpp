@@ -458,7 +458,7 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
     }
     if (not error_) {
         // если не было ошибок, то считаем, что конфиг получен
-        std::cout << message_ << std::endl;
+        _config_was_received = true;
         return true;
     }
     else

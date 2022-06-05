@@ -69,7 +69,7 @@ int main() {
             if (gateway->get_config_from_api(error)) {
                 // если конфиг не был получен, то работать нет смысла
                 if (!gateway->has_config()) {
-                    gateway->send_error("Файл конфигурации от агента не получен.");
+                    gateway->send_error("Файл конфигурации с сервера не получен.");
                     std::this_thread::sleep_for(1s);
                     return EXIT_FAILURE;
                 } else {
