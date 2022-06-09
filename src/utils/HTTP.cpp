@@ -16,10 +16,11 @@ using tcp = net::ip::tcp;
 namespace util
 {
 
-    void HTTPSession::configure(std::string _uri, std::string _api_key, std::string _api_secret) {
-        uri = _uri;
-        api_key = _api_key;
-        api_secret = _api_secret;
+    void HTTPSession::configure(std::string uri_, std::string api_key_, std::string api_secret_, std::string subacc_name_) {
+        _uri         = uri_;
+        _api_key     = api_key_;
+        _api_secret  = api_secret_;
+        _subacc_name = subacc_name_;
     }
 
     http::response<http::string_body> HTTPSession::get(const std::string& target) {
@@ -36,8 +37,8 @@ namespace util
         ssl::context ctx{ssl::context::tls_client};
         ctx.set_default_verify_paths();
 
-        tcp::resolver resolver{ioc};
-        ssl::stream<tcp::socket> stream{ioc, ctx};
+        tcp::resolver resolver{_ioc};
+        ssl::stream<tcp::socket> stream{_ioc, ctx};
 
         // Set SNI Hostname (many hosts need this to handshake successfully)
         if (!SSL_set_tlsext_host_name(stream.native_handle(), _uri.c_str())) {
@@ -88,23 +89,23 @@ namespace util
     }
 
     http::response<http::string_body> HTTPSession::request(http::request<http::string_body> req) {
-        req.set(http::field::host, uri.c_str());
+        req.set(http::field::host, _uri.c_str());
         req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
         //ssl::context ctx{ssl::context::sslv23_client};
         ssl::context ctx{ssl::context::tls_client};
         ctx.set_default_verify_paths();
 
-        tcp::resolver resolver{ioc};
-        ssl::stream<tcp::socket> stream{ioc, ctx};
+        tcp::resolver resolver{_ioc};
+        ssl::stream<tcp::socket> stream{_ioc, ctx};
 
         // Set SNI Hostname (many hosts need this to handshake successfully)
-        if (!SSL_set_tlsext_host_name(stream.native_handle(), uri.c_str())) {
+        if (!SSL_set_tlsext_host_name(stream.native_handle(), _uri.c_str())) {
             boost::system::error_code ec{static_cast<int>(::ERR_get_error()),                                     net::error::get_ssl_category()};
             throw boost::system::system_error{ec};
         }
 
-        auto const results = resolver.resolve(uri.c_str(), "443");
+        auto const results = resolver.resolve(_uri.c_str(), "443");
         net::connect(stream.next_layer(), results.begin(), results.end());
         stream.handshake(ssl::stream_base::client);
 
@@ -142,15 +143,17 @@ namespace util
         if (!body.empty()) {
             data += body;
         }
-        std::string hmacced = _encoding::hmac(std::string(api_secret), data, 32);
+        std::string hmacced = _encoding::hmac(std::string(_api_secret), data, 32);
         std::string sign = _encoding::str_to_hex((unsigned char*)hmacced.c_str(), 32);
         //std::string sign =    _encoding::string_to_hex((unsigned char*)hmacced.c_str(), 32);
 
-        req.set("FTX-KEY", api_key);
+        req.set("FTX-KEY", _api_key);
         //req.set("FTX-TS", ts);
         req.set("FTX-TS", std::to_string(ts));
         req.set("FTX-SIGN", sign);
-        req.set("FTX-SUBACCOUNT", "SecondAcc");
+        if (!_subacc_name.empty()) {
+            req.set("FTX-SUBACCOUNT", "SecondAcc");
+        }
     }
 }
 

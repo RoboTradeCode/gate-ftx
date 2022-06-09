@@ -217,6 +217,10 @@ bool gateway::load_config_from_file(bss::error& error_) noexcept {
                     } else {
                         error_.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                     }
+                    // получаем subaccount
+                    if (auto subaccount_element{cfg["account"]["subacc_name"].get_string()}; simdjson::SUCCESS == subaccount_element.error()) {
+                        _work_config.account.subaccount_name = subaccount_element.value();
+                    } else {}
                     // получаем данные для канала оредбуков
                     if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbooks"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                         _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
@@ -391,6 +395,10 @@ bool gateway::load_config_from_json(const std::string& message_, bss::error &err
                 } else {
                     error_.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                 }
+                // получаем subaccount
+                if (auto subaccount_element{cfg["account"]["subacc_name"].get_string()}; simdjson::SUCCESS == subaccount_element.error()) {
+                    _work_config.account.subaccount_name = subaccount_element.value();
+                } else {}
                 // получаем данные для канала оредбуков
                 if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbooks"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                     _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
@@ -514,9 +522,10 @@ bool gateway::create_public_ws(bss::error& error_) {
     try {
         _ftx_ws_public    = std::make_shared<ftx::WSClient>("",
                                                             "",
+                                                            "",
                                                             _ioc,
-                                                            [&](std::string_view message_, void* id_)
-                                {shared_from_this()->public_ws_handler(message_, id_);},
+                                                            [&](std::string_view message_/*, void* id_*/)
+                                {shared_from_this()->public_ws_handler(message_/*, id_*/);},
                                                             _errors_logger);
         // подписываемся на канал ордербуков
         for (auto market : _work_config._markets) {
@@ -538,9 +547,10 @@ bool gateway::create_private_ws(bss::error& error_) {
     try {
         _ftx_ws_private   = std::make_shared<ftx::WSClient>(_work_config.account.api_key,
                                                             _work_config.account.secret_key,
+                                                            _work_config.account.subaccount_name,
                                                             _ioc,
-                                                            [&](std::string_view message_, void* id_)
-                                {shared_from_this()->private_ws_handler(message_, id_);},
+                                                            [&](std::string_view message_/*, void* id_*/)
+                                {shared_from_this()->private_ws_handler(message_/*, id_*/);},
                                                             _errors_logger);
         // авторизуемся в приватном ws
         std::string error;
@@ -555,6 +565,7 @@ bool gateway::create_private_ws(bss::error& error_) {
         _ftx_ws_private->subscribe_order();
         _general_logger->info(_work_config.account.api_key);
         _general_logger->info(_work_config.account.secret_key);
+        _general_logger->info(_work_config.account.subaccount_name);
         return true;
     } catch (const std::exception& err) {
         error_.describe(fmt::format("Ошибка создания приватного WebSocket канала: {}", err.what()));
@@ -566,7 +577,8 @@ bool gateway::create_private_ws(bss::error& error_) {
 //---------------------------------------------------------------
 bool gateway::create_private_REST(bss::error& error_) {
     _ftx_rest_private = std::make_shared<ftx::RESTClient>(_work_config.account.api_key,
-                                                          _work_config.account.secret_key);
+                                                          _work_config.account.secret_key,
+                                                          _work_config.account.subaccount_name);
     if (!_ftx_rest_private) {
         error_.describe("Ошибка создания приватного REST канала");
         return false;
@@ -694,6 +706,10 @@ void gateway::config_from_agent_handler(std::string_view message_) {
                 } else {
                     _error.describe("При загрузке конфигурации в теле json не найден оъект \"secret_key\".");
                 }
+                // получаем subaccount
+                if (auto subaccount_element{cfg["account"]["subacc_name"].get_string()}; simdjson::SUCCESS == subaccount_element.error()) {
+                    _work_config.account.subaccount_name = subaccount_element.value();
+                } else {}
                 // получаем данные для канала оредбуков
                 if (auto orderbook_channel_element{cfg["aeron"]["publishers"]["orderbooks"]["channel"].get_string()}; simdjson::SUCCESS == orderbook_channel_element.error()) {
                     _work_config.aeron_core.publishers.orderbook.channel = orderbook_channel_element.value();
@@ -795,8 +811,8 @@ void gateway::aeron_handler(std::string_view message_) {
                                 std::string_view side;
                                 std::string symbol;
                                 std::string type;
-                                //int64_t order_id;
                                 std::string order_id;
+                                std::string client_id{};
                                 double price = 0.0;
                                 double amount = 0.0;
                                 if (auto action_element{parse_result["action"].get_string()}; simdjson::SUCCESS == action_element.error()) {
@@ -829,20 +845,30 @@ void gateway::aeron_handler(std::string_view message_) {
                                         if (auto order_id_element{data_element["id"].get_string()}; simdjson::SUCCESS == order_id_element.error()) {
                                             order_id = order_id_element.value();
                                         }
+                                        // получаем client_id, который генерирует ядро
+                                        if (auto client_id_element{data_element["client_id"].get_string()}; simdjson::SUCCESS == client_id_element.error()) {
+                                            client_id = client_id_element.value();
+                                        }
                                         // выставлен ордер на отмену продажи
                                         if (action.compare("cancel_order") == 0) {
                                             cancel_order(order_id);
                                         }
                                         // выставлен ордер на покупку
                                         else if (action.compare("create_order") == 0) {
-                                            create_order(side, symbol, type, price, amount);
+                                            create_order(side, symbol, type, client_id, price, amount);
                                             _orders_logger->info(message_);
                                         //} else if (action.compare("get_balances") == 0){
                                         //    check_balances();
                                         } else if (action.compare("cancel_all_orders") == 0) {
                                             cancel_all_orders();
                                             _orders_logger->info(message_);
-                                        } else {
+                                        } else if (action.compare("order_status") == 0) {
+                                            if (client_id.empty())
+                                                get_order_status(order_id);
+                                            else
+                                                get_order_status_by_client_id(client_id);
+                                            _orders_logger->info(message_);
+                                        }else {
                                             //_error.describe("Не могу распознать action и side в команде от ядра {}.", message_);
                                             _general_logger->error("Не могу распознать action и side в команде от ядра {}.", message_.data());
                                         }
@@ -924,9 +950,10 @@ void gateway::cancel_order(const std::string& order_id_) {
     }*/
     std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
                                            _work_config.account.secret_key,
+                                           _work_config.account.subaccount_name,
                                            _ioc,
                                            [&](std::string_view message_)
-             {shared_from_this()->place_order_result_handler(message_);})->cancel_order(order_id_);
+             {shared_from_this()->place_cancel_order_handler(message_);})->cancel_order(order_id_);
 }
 //---------------------------------------------------------------
 // отменяет все ордера
@@ -935,27 +962,31 @@ void gateway::cancel_all_orders() {
     _general_logger->info("Получена команда на отмену всех ордеров");
 //    _error.clear();
     for (auto market : _work_config._markets) {
-//        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
-//        if (_error) {
-//            _error.describe(fmt::format("Ошибка отмены ордеров для {}", market));
-//            _general_logger->error("Результат отмены всех ордеров: {}, ошибка: {}", cancel_all_order_result, _error.to_string());
-//            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result, true, _error.to_string());
-//            _error.clear();
-//        } else {
-//            _general_logger->info("Результат отмены всех ордеров для {} {}", market, cancel_all_order_result);
-//            order_status_prepare("cancel_all_orders", "All orders was cancel", cancel_all_order_result);
-//        }
-        std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+        std::string cancel_all_order_result = _ftx_rest_private->cancel_all_orders(market, _error);
+        if (_error) {
+            _error.describe(fmt::format("Ошибка отмены ордеров для {}", market));
+            _general_logger->error("Результат отмены всех ордеров: {}, ошибка: {}", cancel_all_order_result, _error.to_string());
+            //order_status_prepare("order_cancel", "All orders was cancel", cancel_all_order_result, true, _error.to_string());
+            // отправим ошибку в лог сервер
+            log_sender("error", "order_cancel", cancel_all_order_result);
+            _error.clear();
+        } else {
+            // в случае успешной отмены информация в лог сервер уйдет в приватном ws канале
+            _general_logger->info("Результат отмены всех ордеров для {} {}", market, cancel_all_order_result);
+            //order_status_prepare("order_cancel", "All orders was cancel", cancel_all_order_result);
+        }
+ /*       std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
                                                _work_config.account.secret_key,
+                                               _work_config.account.subaccount_name,
                                                _ioc,
                                                [&](std::string_view message_)
-                 {shared_from_this()->place_order_result_handler(message_);})->cancel_all_orders(market);
+                 {shared_from_this()->place_cancel_all_orders_handler(message_);})->cancel_all_orders(market);*/
     }
 }
 //---------------------------------------------------------------
 // обрабатывает команду на создания ордера
 //---------------------------------------------------------------
-void gateway::create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const double& price_, const double& quantity_) {
+void gateway::create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const std::string& client_id_, const double& price_, const double& quantity_) {
     //_error.clear();
     if (side_.compare("buy") == 0) {
         _general_logger->info("Ядром выставлен {} ордер на покупку {} с ценой: {} и объёмом {}", type_, symbol_, price_, quantity_);
@@ -971,11 +1002,24 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
         }*/
         // выставляем ордер асинхронно
         if (symbol_.size() != 0 && type_.size() != 0) {
-            std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
-                                                   _work_config.account.secret_key,
-                                                   _ioc,
-                                                   [&](std::string_view message_)
-                     {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "buy", type_, price_, quantity_);
+            // если client_id пустой, то вызываем функцию создания ордера без клиентского ордера
+            if (client_id_.empty()) {
+                std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                       _work_config.account.secret_key,
+                                                       _work_config.account.subaccount_name,
+                                                       _ioc,
+                                                       [&](std::string_view message_)
+                         {shared_from_this()->place_create_order_handler(message_);})->place_order(symbol_, "buy", type_, price_, quantity_);
+            } else {
+                // иначе вызываем функцию создания ордера с client_id
+                std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                       _work_config.account.secret_key,
+                                                       _work_config.account.subaccount_name,
+                                                       _ioc,
+                                                       [&](std::string_view message_)
+                         {shared_from_this()->place_create_order_handler(message_);})->place_order(client_id_, symbol_, "buy", type_, price_, quantity_);
+            }
+
         } else {
             _errors_logger->error("Неизвестные symbol и type ордера");
         }
@@ -994,11 +1038,23 @@ void gateway::create_order(std::string_view side_, const std::string& symbol_, c
             order_status_prepare("order_created", "Order was created", place_order_result);
         }*/
         if (symbol_.size() != 0 && type_.size() != 0) {
-            std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
-                                                   _work_config.account.secret_key,
-                                                   _ioc,
-                                                   [&](std::string_view message_)
-                     {shared_from_this()->place_order_result_handler(message_);})->place_order(symbol_, "sell", type_, price_, quantity_);
+            // если client_id пустой, то вызываем функцию создания ордера без клиентского ордера
+            if (client_id_.empty()) {
+                std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                       _work_config.account.secret_key,
+                                                       _work_config.account.subaccount_name,
+                                                       _ioc,
+                                                       [&](std::string_view message_)
+                         {shared_from_this()->place_create_order_handler(message_);})->place_order(symbol_, "sell", type_, price_, quantity_);
+            } else {
+                std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                                       _work_config.account.secret_key,
+                                                       _work_config.account.subaccount_name,
+                                                       _ioc,
+                                                       [&](std::string_view message_)
+                         {shared_from_this()->place_create_order_handler(message_);})->place_order(client_id_, symbol_, "sell", type_, price_, quantity_);
+            }
+
         } else {
             _errors_logger->error("Неизвестные symbol и type ордера");
         }
@@ -1115,6 +1171,7 @@ void gateway::order_status_prepare(const s_order& response_, std::string_view ac
     JSON data;
     {
         data["id"]        = response_.id;
+        data["client_id"] = response_.client_id;
         data["timestamp"] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         data["status"]    = response_.status;
         data["symbol"]    = response_.symbol;
@@ -1133,6 +1190,7 @@ void gateway::order_status_prepare(const s_order& response_, std::string_view ac
 // отправляет order_status
 //---------------------------------------------------------------
 void gateway::order_status_sender(std::string_view order_status_) {
+    //std::cout << "!!!!!!" << order_status_ << std::endl;
     std::int64_t result = _order_status_channel->offer(order_status_.data());
     if (result < 0) {
         // чтобы не переполнять лог файл ошибок не будем в первый раз логировать ошибку с кодом -3
@@ -1169,14 +1227,14 @@ void gateway::order_status_sender(std::string_view order_status_) {
 //---------------------------------------------------------------
 // приватный канал WS (neew refactoring, обработка ошибок и отмена try catch)
 //---------------------------------------------------------------
-void gateway::private_ws_handler(std::string_view message_, void* id_) {
+void gateway::private_ws_handler(std::string_view message_/*, void* id_*/) {
     if (message_.compare("{\"type\":\"pong\"}") == 0) {
     //if (message_.find("pong") != std::string_view::npos) {
         //std::cout << "pong in private" << std::endl;
         return;
     } else {}
     try {
-        //_general_logger->info("(message from private_ws_handler): {}", message_);
+        _general_logger->info("(message from private_ws_handler): {}", message_);
         // создадим парсер
         simdjson::dom::parser parser;
         // пусть парсер подготовит буфер для своих нужд
@@ -1220,12 +1278,15 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
                             //id = element_id.value();
                             response.id = element_id.value();
                         } else {}
+                        if (auto element_client_id{result["data"]["clientId"].get_string()}; simdjson::SUCCESS == element_client_id.error()) {
+                            response.client_id = element_client_id.value();
+                        } else {}
                         if (auto element_symbol{result["data"]["market"].get_string()}; simdjson::SUCCESS == element_symbol.error()) {
                             response.symbol = element_symbol.value();
                         } else {}
-                        order_status order_status = get_order_change_description(response.side, response.status, response.filled, response.remaining);
-                        _general_logger->info("(ws private) произошли изменения в ордерах: {} object_id = {} id: {} side: {} status: {} filledSize: {} remainingSize: {}",
-                                              order_status.description, id_, response.id, response.side, response.status, response.filled, response.remaining);
+                        order_status order_status = get_order_change_description(response/*response.side, response.status, response.filled, response.remaining*/);
+                        _general_logger->info("(ws private) произошли изменения в ордерах: {}  id: {} side: {} status: {} filledSize: {} remainingSize: {}",
+                                              order_status.description, response.id, response.side, response.status, response.filled, response.remaining);
                         order_status_prepare(response, order_status.action, order_status.message);
                         // проверяем и отправляем баланс (ассеты берем из кофига)
                         check_balances(_work_config._assets);
@@ -1261,20 +1322,20 @@ void gateway::private_ws_handler(std::string_view message_, void* id_) {
 //---------------------------------------------------------------
 // получает более подробную информацию об изменении ордера
 //---------------------------------------------------------------
-order_status gateway::get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_) {
+order_status gateway::get_order_change_description(const s_order& response/*std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_*/) {
 
     //std::string result_message;
     order_status result_status;
 
-    if (0 == side_.compare("buy")) {
-        if (0 == status_.compare("new")) {
+    if (0 == response.side.compare("buy")) {
+        if (0 == response.status.compare("new")) {
             // выставлен новый ордер
             result_status.description = " Создан ордер на покупку. ";
             result_status.action      = "order_created";
             result_status.message     = "Order was created";
-        } else if (0 == status_.compare("closed")) {
+        } else if (0 == response.status.compare("closed")) {
             // ордер был выполнен или отменен
-            if ((0 == filled_size_) && (0 == remaining_size_)) {
+            if ((0 == response.filled) && (0 == response.remaining)) {
                 //result_message = " Покупка выполнена. ";
                 result_status.description = " Покупка отменена. ";
                 result_status.action      = "order_cancel";
@@ -1288,15 +1349,15 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
         } else {
             result_status.description = " Неопределенный статус в ордере buy. ";
         }
-    } else if (0 == side_.compare("sell")) {
-        if (0 == status_.compare("new")) {
+    } else if (0 == response.side.compare("sell")) {
+        if (0 == response.status.compare("new")) {
             // выставлен новый ордер
             result_status.description = " Создан ордер на продажу. ";
             result_status.action      = "order_created";
             result_status.message     = "Order was created";
-        } else if (0 == status_.compare("closed")) {
+        } else if (0 == response.status.compare("closed")) {
             // ордер выполнен или отменен
-            if ((0 == filled_size_) && (0 == remaining_size_)) {
+            if ((0 == response.filled) && (0 == response.remaining)) {
                 //result_message = " Продажа выполнена. ";
                 result_status.description = " Продажа отменена. ";
                 result_status.action      = "order_cancel";
@@ -1316,7 +1377,7 @@ order_status gateway::get_order_change_description(std::string_view side_, std::
 //---------------------------------------------------------------
 // публичный канал WS
 //---------------------------------------------------------------
-void gateway::public_ws_handler(std::string_view message_, void* id_) {
+void gateway::public_ws_handler(std::string_view message_/*, void* id_*/) {
     if (message_.compare("{\"type\":\"pong\"}") == 0) {
         _pingpong_logger->info("pong in public ws.");
         return;
@@ -1612,9 +1673,252 @@ void gateway::orderbook_sender(std::string_view orderbook_) {
     //std::cout << result << " length: " << orderbook_.size() << std::endl;
 }
 //---------------------------------------------------------------
+// callback функция результата запроса статуса ордера
+//---------------------------------------------------------------
+void gateway::status_order_handler(std::string_view response_) {
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+    std::cout << "+++++++++++++++  order status response  ++++++++++++++"<<std::endl;
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+    _general_logger->info("(message from status_order_handler): {}", response_);
+    // создадим парсер
+    simdjson::dom::parser parser;
+    // пусть парсер подготовит буфер для своих нужд
+    auto &&error_code = parser.allocate(0x1000,0x04);
+    // если буфер был успешно выделен
+    if (simdjson::SUCCESS == error_code) {
+        // разбираем строку
+        auto result = parser.parse(response_.data(), response_.size(), false);
+        // если данные успешно разобрались
+        if (simdjson::SUCCESS == result.error()) {
+            if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
+                // если значения == true, значит статус ордера получен
+                if (element_success.value() == true) {
+                    s_order response;
+                    if (auto element_type{result["result"]["type"].get_string()}; simdjson::SUCCESS == element_type.error()) {
+                        response.type = element_type.value();
+                    } else {}
+                    if (auto element_side{result["result"]["side"].get_string()}; simdjson::SUCCESS == element_side.error()) {
+                        response.side = element_side.value();
+                    } else {}
+                    if (auto element_price{result["result"]["price"].get_double()}; simdjson::SUCCESS == element_price.error()) {
+                        response.price = element_price.value();
+                    } else {}
+                    if (auto element_size{result["result"]["size"].get_double()}; simdjson::SUCCESS == element_size.error()) {
+                        response.amount = element_size.value();
+                    } else {}
+                    if (auto element_status{result["result"]["status"].get_string()}; simdjson::SUCCESS == element_status.error()) {
+                        response.status = element_status.value();
+                    } else {}
+                    if (auto element_filled{result["result"]["filledSize"].get_double()}; simdjson::SUCCESS == element_filled.error()) {
+                        response.filled = element_filled.value();
+                    } else {}
+                    if (auto element_remaining{result["result"]["remainingSize"].get_double()}; simdjson::SUCCESS == element_remaining.error()) {
+                        response.remaining = element_remaining.value();
+                    } else {}
+                    if (auto element_id{result["result"]["id"].get_int64()}; simdjson::SUCCESS == element_id.error()) {
+                        response.id = element_id.value();
+                    } else {}
+                    if (auto element_client_id{result["result"]["clientId"].get_string()}; simdjson::SUCCESS == element_client_id.error()) {
+                        response.client_id = element_client_id.value();
+                    } else {}
+                    if (auto element_symbol{result["result"]["market"].get_string()}; simdjson::SUCCESS == element_symbol.error()) {
+                        response.symbol = element_symbol.value();
+                    } else {}
+                    order_status order_status = get_order_change_description(response/*response.side, response.status, response.filled, response.remaining*/);
+                    _general_logger->info("Получен статус ордера: {}  id: {} side: {} status: {} filledSize: {} remainingSize: {}",
+                                                                  order_status.description, response.id, response.side, response.status, response.filled, response.remaining);
+                    order_status_prepare(response, "order_status", "Order status was received");
+                } else if(element_success.value() == false) {
+                    if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
+                        _error.describe(fmt::format("(status_order_handler) Ошибка получения статуса ордера. Причина: {}).", element_error.value()));
+                        _general_logger->error(_error.to_string());
+                        // отправим ошибку в лог сервер
+                        log_sender("error", "order_status", element_error.value());
+                        // удалим ошибки
+                        _error.clear();
+                    } else {}
+                }
+            }
+        } else {
+            _error.describe(fmt::format("Ошибка разбора json фрейма. ((status_order_handler) json body: {}).", response_));
+            _general_logger->error(_error.to_string());
+            _error.clear();
+        }
+    } else {
+        _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((status_order_handler) json body: {}).", response_));
+        _general_logger->error(_error.to_string());
+        _error.clear();
+    }
+}
+
+//---------------------------------------------------------------
 // callback функция результата выставления оредров
 //---------------------------------------------------------------
-void gateway::place_order_result_handler(std::string_view message_) {
+void gateway::place_create_order_handler(std::string_view message_) {
+    try {
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout << "++++++++++++++++++++++++++++++++++++++++++++++++++++++"<<std::endl;
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        // создадим парсер
+        simdjson::dom::parser parser;
+        // пусть парсер подготовит буфер для своих нужд
+        auto &&error_code = parser.allocate(0x1000,0x04);
+        // если буфер был успешно выделен
+        if(simdjson::SUCCESS == error_code){
+            // разбираем строку
+            auto result = parser.parse(message_.data(), message_.size(), false);
+            // если данные успешно разобрались
+            if(simdjson::SUCCESS == result.error()) {
+                // получаем значение поля success
+                if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
+                    // если значения == true, значит ордер выставлен успешно
+                    if(element_success.value() == true) {
+                        _general_logger->info("(place_create_order_handler) Результат создания ордера: {}", message_);
+                    } else if(element_success.value() == false) {
+                        if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
+                            _error.describe(fmt::format("(place_create_order_handler) Ошибка создания ордера. Причина: {}).", element_error.value()));
+                            _general_logger->error(_error.to_string());
+                            // отправим ошибку в лог сервер
+                            log_sender("error", "order_created", element_error.value());
+                            // удалим ошибки
+                            _error.clear();
+                        } else {}
+                    }
+                }
+            } else {
+                _error.describe(fmt::format("Ошибка разбора json фрейма. ((place_create_order_handler) json body: {}).", message_));
+                _general_logger->error(_error.to_string());
+                _error.clear();
+            }
+        } else {
+            _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((order_result_handler) json body: {}).", message_));
+            _general_logger->error(_error.to_string());
+            _error.clear();
+        }
+
+    } catch(simdjson::simdjson_error& err) {
+        _error.describe(err.what() + fmt::format(" ((place_create_order_handler) json body: {}).", message_));
+        _general_logger->error(_error.to_string());
+        _error.clear();
+    }
+}
+//---------------------------------------------------------------
+// callback функция результата отмены оредров
+//---------------------------------------------------------------
+void gateway::place_cancel_order_handler(std::string_view message_) {
+    try {
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout << "------------------------------------------------------"<<std::endl;
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        // создадим парсер
+        simdjson::dom::parser parser;
+        // пусть парсер подготовит буфер для своих нужд
+        auto &&error_code = parser.allocate(0x1000,0x04);
+        // если буфер был успешно выделен
+        if(simdjson::SUCCESS == error_code){
+            // разбираем строку
+            auto result = parser.parse(message_.data(), message_.size(), false);
+            // если данные успешно разобрались
+            if(simdjson::SUCCESS == result.error()) {
+                // получаем значение поля success
+                if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
+                    // если значения == true, значит ордер выставлен успешно
+                    if(element_success.value() == true) {
+                        //auto res_value = result["result"];
+                        _general_logger->info("(place_cancel_order_handler) Результат отмены ордера: {}", message_);
+                    } else if(element_success.value() == false) {
+                        if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
+                            _error.describe(fmt::format("(place_cancel_order_handler) Ошибка отмены ордера. Причина: {}).", element_error.value()));
+                            _general_logger->error(_error.to_string());
+                            // отправим ошибку в лог сервер
+                            log_sender("error", "order_cancel", element_error.value());
+                            // удалим ошибки
+                            _error.clear();
+                        } else {}
+
+//                        auto err_value = result["error"];
+//                        _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
+//                        _general_logger->error(_error.to_string());
+//                        _error.clear();
+                    }
+                }
+            } else {
+                _error.describe(fmt::format("Ошибка разбора json фрейма. ((place_cancel_order_handler) json body: {}).", message_));
+                _general_logger->error(_error.to_string());
+                _error.clear();
+            }
+        } else {
+            _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((order_result_handler) json body: {}).", message_));
+            _general_logger->error(_error.to_string());
+            _error.clear();
+        }
+
+    } catch(simdjson::simdjson_error& err) {
+        _error.describe(err.what() + fmt::format(" ((place_cancel_order_handler) json body: {}).", message_));
+        _general_logger->error(_error.to_string());
+        _error.clear();
+    }
+}//---------------------------------------------------------------
+// callback функция результата отмены всех оредров
+//---------------------------------------------------------------
+void gateway::place_cancel_all_orders_handler(std::string_view message_) {
+    try {
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout << "----------------all-----------------------------------"<<std::endl;
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        // создадим парсер
+        simdjson::dom::parser parser;
+        // пусть парсер подготовит буфер для своих нужд
+        auto &&error_code = parser.allocate(0x1000,0x04);
+        // если буфер был успешно выделен
+        if(simdjson::SUCCESS == error_code){
+            // разбираем строку
+            auto result = parser.parse(message_.data(), message_.size(), false);
+            // если данные успешно разобрались
+            if(simdjson::SUCCESS == result.error()) {
+                // получаем значение поля success
+                if (auto element_success{result["success"].get_bool()}; simdjson::SUCCESS == element_success.error()) {
+                    // если значения == true, значит ордер выставлен успешно
+                    if(element_success.value() == true) {
+                        //auto res_value = result["result"];
+                        _general_logger->info("(place_cancel_all_orders_handler) Результат отмены ордера: {}", message_);
+                    } else if(element_success.value() == false) {
+                        if (auto element_error{result["error"].get_string()}; simdjson::SUCCESS == element_error.error()) {
+                            _error.describe(fmt::format("(place_cancel_all_orders_handler) Ошибка отмены ордера. Причина: {}).", element_error.value()));
+                            _general_logger->error(_error.to_string());
+                            // отправим ошибку в лог сервер
+                            log_sender("error", "order_cancel", element_error.value());
+                            // удалим ошибки
+                            _error.clear();
+                        } else {}
+
+//                        auto err_value = result["error"];
+//                        _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
+//                        _general_logger->error(_error.to_string());
+//                        _error.clear();
+                    }
+                }
+            } else {
+                _error.describe(fmt::format("Ошибка разбора json фрейма. ((place_cancel_all_orders_handler) json body: {}).", message_));
+                _general_logger->error(_error.to_string());
+                _error.clear();
+            }
+        } else {
+            _error.describe(fmt::format("Ошибка инициализации парсера(внутренний буфер не выделился (parser.allocate(0x1000,0x04)). ((order_result_handler) json body: {}).", message_));
+            _general_logger->error(_error.to_string());
+            _error.clear();
+        }
+
+    } catch(simdjson::simdjson_error& err) {
+        _error.describe(err.what() + fmt::format(" ((place_cancel_all_orders_handler) json body: {}).", message_));
+        _general_logger->error(_error.to_string());
+        _error.clear();
+    }
+}
+//---------------------------------------------------------------
+// callback функция результата выставления оредров
+//---------------------------------------------------------------
+/*void gateway::place_order_result_handler(std::string_view message_) {
     //std::cout << "place_order_result_handler: " << message_ << std::endl;
     try {
         // создадим парсер
@@ -1643,10 +1947,10 @@ void gateway::place_order_result_handler(std::string_view message_) {
                             _error.clear();
                         } else {}
 
-                        /*auto err_value = result["error"];
-                        _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
-                        _general_logger->error(_error.to_string());
-                        _error.clear();*/
+//                        auto err_value = result["error"];
+//                        _error.describe(fmt::format("(order_result_handler) Ошибка выставления ордера. Причина: {}).", std::string(err_value.get_c_str())));
+//                        _general_logger->error(_error.to_string());
+//                        _error.clear();
                     }
                 }
             } else {
@@ -1665,7 +1969,7 @@ void gateway::place_order_result_handler(std::string_view message_) {
         _general_logger->error(_error.to_string());
         _error.clear();
     }
-}
+}*/
 //---------------------------------------------------------------
 // отправляет в ядро информацию о балансе
 //---------------------------------------------------------------
@@ -1689,7 +1993,7 @@ void gateway::balance_sender(const std::map<std::string, s_balances_state>& bala
 //        data[balance.coin] = asset;
         asset["free"]  = balance.second.free;
         asset["used"]  = (balance.second.total - balance.second.free);
-        asset["toral"] = balance.second.total;
+        asset["total"] = balance.second.total;
         data[balance.first] = asset;
     }
     balance_root["data"] = data;
@@ -1735,7 +2039,7 @@ void gateway::balance_sender(const std::map<std::string, s_balances_state>& bala
 //---------------------------------------------------------------
 // отправляет сообщение в лог сервер
 //---------------------------------------------------------------
-void gateway::log_sender(const std::string& action_, std::string_view message_){
+void gateway::log_sender(const std::string& event_, const std::string& action_, std::string_view message_){
 
     JSON log_root;
     log_root["event"]     = "error";
@@ -1791,6 +2095,30 @@ void gateway::check_balances(const std::vector<std::string>& assets_) {
         // отправляем баланс в ядро
         balance_sender(balances_map);
     }
+}
+//---------------------------------------------------------------
+// запрашивает статус ордера по order_id
+//---------------------------------------------------------------
+void gateway::get_order_status(const std::string &order_id_) {
+    _general_logger->info("Получена команда на получение статуса ордера: order_id = {}.", order_id_);
+    std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                           _work_config.account.secret_key,
+                                           _work_config.account.subaccount_name,
+                                           _ioc,
+                                           [&](std::string_view response_)
+             {shared_from_this()->status_order_handler(response_);})->get_order_status(order_id_);
+}
+//---------------------------------------------------------------
+// запрашивает статус ордера по client_id
+//---------------------------------------------------------------
+void gateway::get_order_status_by_client_id(const std::string &client_id_) {
+    _general_logger->info("Получена команда на получение статуса ордера: client_id_ = {}.", client_id_);
+    std::make_shared<ftx::AsyncRESTClient>(_work_config.account.api_key,
+                                           _work_config.account.secret_key,
+                                           _work_config.account.subaccount_name,
+                                           _ioc,
+                                           [&](std::string_view response_)
+             {shared_from_this()->status_order_handler(response_);})->get_order_status_by_client_id(client_id_);
 }
 //---------------------------------------------------------------
 // обрабатывает ошибку

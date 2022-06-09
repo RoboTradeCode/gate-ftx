@@ -10,7 +10,7 @@ namespace util
            const std::string& port_,
            const std::string& target_,
            net::io_context& ioc_,
-           std::function<void(std::string, void*)> event_handler_,
+           std::function<void(std::string/*, void**/)> event_handler_,
            const std::shared_ptr<spdlog::logger> &logger_)
         :_event_handler(std::move(event_handler_))
     {
@@ -65,7 +65,7 @@ namespace util
 
             throw std::runtime_error("on_read: " + _channel_name);
         }
-        _event_handler(beast::buffers_to_string(_buffer.data()), this);
+        _event_handler(beast::buffers_to_string(_buffer.data())/*, this*/);
         _buffer.clear();
         _ws->async_read(_buffer, beast::bind_front_handler(&WS::on_read, shared_from_this()));
     }

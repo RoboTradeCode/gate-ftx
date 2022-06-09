@@ -3,9 +3,9 @@
 #include <sstream>
 namespace ftx {
 
-    RESTClient::RESTClient(const std::string api_key_, const std::string api_secret_)
+    RESTClient::RESTClient(const std::string api_key_, const std::string api_secret_, const std::string subaccount_name_)
     {
-        _http_client.configure(_uri, api_key_, api_secret_);
+        _http_client.configure(_uri, api_key_, api_secret_, subaccount_name_);
     }
 
     //----------------------------------------------------------
@@ -93,7 +93,7 @@ namespace ftx {
                                         bool post_only_,
                                         bool reduce_only_)
     {
-        json_loh payload = {{"market",      market_},
+        JSON payload = {{"market",      market_},
                             {"side",        side_},
                             {"price",       price_},
                             {"type",        "limit"},
@@ -129,7 +129,7 @@ namespace ftx {
     {
         std::string result_string = "";
         http::response<http::string_body> response;
-        json_loh payload = {{"market", market_}};
+        JSON payload = {{"market", market_}};
         try {
             response = _http_client.delete_("orders", payload.dump());
             simdjson::dom::parser parser;
@@ -237,7 +237,7 @@ namespace ftx {
             //response = http_client.get("wallet/all_balances");
             //try
             //{
-                std::cout<<"get_balances: " << response.body().c_str()<<std::endl;
+                //std::cout<<"get_balances: " << response.body().c_str()<<std::endl;
                 simdjson::dom::parser parser;
                 auto &&error_code = parser.allocate(0x1000,0x04);
                 if(simdjson::SUCCESS == error_code)

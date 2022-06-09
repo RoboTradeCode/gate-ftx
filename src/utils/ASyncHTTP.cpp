@@ -1,19 +1,21 @@
 #include "ASyncHTTP.hpp"
 
-AsyncHTTPSession::AsyncHTTPSession(net::any_io_executor ex,
-                 ssl::context& ctx,
-                 const std::string& api_key,
-                 const std::string& api_secret,
-                 std::function<void(std::string)> event_handler)
-: resolver_(ex)
-, stream_(ex, ctx)
-, api_key_(api_key)
-, api_secret_(api_secret)
-, event_handler(std::move(event_handler))
+AsyncHTTPSession::AsyncHTTPSession(net::any_io_executor ex_,
+                 ssl::context& ctx_,
+                 const std::string& api_key_,
+                 const std::string& api_secret_,
+                 const std::string& subacc_name_,
+                 std::function<void(std::string)> event_handler_)
+: resolver_(ex_)
+, stream_(ex_, ctx_)
+, _api_key(api_key_)
+, _api_secret(api_secret_)
+, _subacc_name(subacc_name_)
+, event_handler(std::move(event_handler_))
 {
     //std::cout << "session is create" << std::endl;
-    host_ = "ftx.com";
-    port_ = "443";
+    _host = "ftx.com";
+    _port = "443";
 }
 
 AsyncHTTPSession::~AsyncHTTPSession() {
@@ -21,7 +23,7 @@ AsyncHTTPSession::~AsyncHTTPSession() {
 }
 void AsyncHTTPSession::get(const std::string& target) {
     // Set SNI Hostname (many hosts need this to handshake successfully)
-    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), _host.c_str()))
     {
         beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
         std::cerr << ec.message() << "\n";
@@ -31,14 +33,14 @@ void AsyncHTTPSession::get(const std::string& target) {
     // Set up an HTTP GET request message
     req_.method(http::verb::get);
     req_.target(target.c_str());
-    req_.set(http::field::host, host_);
+    req_.set(http::field::host, _host);
     req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
     // Look up the domain name
-    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+    resolver_.async_resolve(_host, _port, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
 void AsyncHTTPSession::post(const std::string &target, const std::string &payload) {
-    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), _host.c_str()))
     {
         beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
         std::cerr << ec.message() << "\n";
@@ -50,14 +52,14 @@ void AsyncHTTPSession::post(const std::string &target, const std::string &payloa
     req_.body() = payload;
     req_.prepare_payload();
     req_.target(target.c_str());
-    req_.set(http::field::host, host_);
+    req_.set(http::field::host, _host);
     req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
     // Look up the domain name
-    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+    resolver_.async_resolve(_host, _port, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
 void AsyncHTTPSession::delete_(const std::string& target, const std::string &payload) {
-    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), _host.c_str()))
     {
         beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
         std::cerr << ec.message() << "\n";
@@ -68,14 +70,14 @@ void AsyncHTTPSession::delete_(const std::string& target, const std::string &pay
     req_.body() = payload;
     req_.prepare_payload();
     req_.target(target.c_str());
-    req_.set(http::field::host, host_);
+    req_.set(http::field::host, _host);
     req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
     // Look up the domain name
-    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+    resolver_.async_resolve(_host, _port, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
 void AsyncHTTPSession::delete_(const std::string &target_) {
-    if(! SSL_set_tlsext_host_name(stream_.native_handle(), host_.c_str()))
+    if(! SSL_set_tlsext_host_name(stream_.native_handle(), _host.c_str()))
     {
         beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
         std::cerr << ec.message() << "\n";
@@ -84,11 +86,11 @@ void AsyncHTTPSession::delete_(const std::string &target_) {
     // Set up an HTTP POST request message
     req_.method(http::verb::delete_);
     req_.target(target_.c_str());
-    req_.set(http::field::host, host_);
+    req_.set(http::field::host, _host);
     req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
     // Look up the domain name
-    resolver_.async_resolve(host_, port_, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
+    resolver_.async_resolve(_host, _port, beast::bind_front_handler(&AsyncHTTPSession::on_resolve, shared_from_this()));
 }
 void AsyncHTTPSession::on_resolve(beast::error_code ec, tcp::resolver::results_type results) {
     if(ec)
@@ -162,13 +164,15 @@ void AsyncHTTPSession::authenticate(http::request<http::string_body>& req) {
     if (!body.empty()) {
         data += body;
     }
-    std::string hmacced = util::_encoding::hmac(std::string(api_secret_), data, 32);
+    std::string hmacced = util::_encoding::hmac(std::string(_api_secret), data, 32);
     std::string sign = util::_encoding::str_to_hex((unsigned char*)hmacced.c_str(), 32);
 
-    req.set("FTX-KEY", api_key_);
+    req.set("FTX-KEY", _api_key);
     req.set("FTX-TS", std::to_string(ts));
     req.set("FTX-SIGN", sign);
-    req.set("FTX-SUBACCOUNT", "SecondAcc");
+    if (!_subacc_name.empty()) {
+        req.set("FTX-SUBACCOUNT", _subacc_name);
+    }
 
 }
 void AsyncHTTPSession::fail(beast::error_code ec, char const* what) {

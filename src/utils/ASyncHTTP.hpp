@@ -31,16 +31,18 @@ class AsyncHTTPSession : public std::enable_shared_from_this<AsyncHTTPSession>
     //http::request<http::empty_body> req_;
     http::request<http::string_body> req_;
     http::response<http::string_body> res_;
-    std::string host_;
-    std::string port_;
-    std::string api_key_;
-    std::string api_secret_;
+    std::string _host;
+    std::string _port;
+    std::string _api_key;
+    std::string _api_secret;
+    std::string _subacc_name;
 public:
-    AsyncHTTPSession(net::any_io_executor ex,
-            ssl::context& ctx,
-            const std::string& api_key,
-            const std::string& api_secret,
-            std::function<void(std::string)> event_handler);
+    AsyncHTTPSession(net::any_io_executor ex_,
+            ssl::context& ctx_,
+            const std::string& api_key_,
+            const std::string& api_secret_,
+            const std::string& subacc_name_,
+            std::function<void(std::string)> event_handler_);
 
     ~AsyncHTTPSession();
 

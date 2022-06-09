@@ -36,6 +36,7 @@ struct gate_config
     {
         std::string api_key;
         std::string secret_key;
+        std::string subaccount_name;
     }account;
 
     struct aeron_core

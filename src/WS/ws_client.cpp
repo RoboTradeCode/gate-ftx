@@ -11,13 +11,15 @@ namespace ftx {
 
     WSClient::WSClient(const std::string& api_key,
                        const std::string& api_secret,
+                       const std::string& subacc_name_,
                        net::io_context& ioc,
-                       const std::function<void(std::string, void*)>& event_handler,
+                       const std::function<void(std::string/*, void**/)>& event_handler,
                        const std::shared_ptr<spdlog::logger> &logger)
     {
         try{
-            m_api_key     = api_key;
-            m_api_secret  = api_secret;
+            _api_key         = api_key;
+            _api_secret      = api_secret;
+            _subaccount_name = subacc_name_;
             ws = std::make_shared<util::WS>("ftx.com", "443", "/ws", ioc, event_handler, logger);
             if(api_key.empty() && api_secret.empty())
                 ws->set_channel_name("public channel");
@@ -72,18 +74,18 @@ namespace ftx {
     size_t WSClient::login(std::string& error)
     {
         try{
-            if (!(m_api_key.empty() || m_api_secret.empty()))
+            if (!(_api_key.empty() || _api_secret.empty()))
             {
                 long ts = util::get_ms_timestamp(util::current_time()).count();
                 std::string data = std::to_string(ts) + "websocket_login";
-                std::string hmacced = encoding::hmac(std::string(m_api_secret), data, 32);
+                std::string hmacced = encoding::hmac(std::string(_api_secret), data, 32);
                 std::string sign = encoding::str_to_hex((unsigned char*)hmacced.c_str(), 32);
-                if (m_subaccount_name.empty()) {
+                if (_subaccount_name.empty()) {
                     return ws->write(json::serialize(json::value{
                                                   {"op", "login"},
                                                   {"args",
                                                   {
-                                                      {"key", m_api_key},
+                                                      {"key", _api_key},
                                                       {"sign", sign},
                                                       {"time", ts}
                                                   }
@@ -94,10 +96,10 @@ namespace ftx {
                                                   {"op", "login"},
                                                   {"args",
                                                   {
-                                                      {"key", m_api_key},
+                                                      {"key", _api_key},
                                                       {"sign", sign},
                                                       {"time", ts},
-                                                      {"subaccount", "SecondAcc"}
+                                                      {"subaccount", _subaccount_name}
                                                   }
                                                   }
                                               }));

@@ -19,8 +19,9 @@ namespace ftx
     public:
         explicit WSClient(const std::string& api_key,
                           const std::string& api_secret,
+                          const std::string& subacc_name_,
                           boost::asio::io_context& ioc,
-                          const std::function<void(std::string, void*)>& event_handler,
+                          const std::function<void(std::string/*, void**/)>& event_handler,
                           const std::shared_ptr<spdlog::logger> &logger);
 
         size_t subscribe_ticker(const std::string &market);
@@ -33,9 +34,9 @@ namespace ftx
         std::shared_ptr<util::WS> ws;
 
     private:
-        std::string m_api_key;
-        std::string m_api_secret;
-        std::string m_subaccount_name = "SecondAcc";
+        std::string _api_key;
+        std::string _api_secret;
+        std::string _subaccount_name;
     };
 }
 #endif

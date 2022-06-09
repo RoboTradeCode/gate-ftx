@@ -9,14 +9,14 @@
 #include "../utils/decl_header.hpp"
 #include "../utils/error.hpp"
 
-using json_loh = nlohmann::json;
+using JSON = nlohmann::json;
 
 namespace ftx {
 
 class RESTClient
 {
   public:
-    RESTClient(const std::string api_key_, const std::string api_secret_);
+    RESTClient(const std::string api_key_, const std::string api_secret_, const std::string subaccount_name_);
 
     // получает открытые ордера
     std::vector<s_order> get_open_orders(const std::string market_, bss::error& error_);

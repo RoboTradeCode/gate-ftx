@@ -24,13 +24,13 @@ namespace util
     public:
         std::shared_ptr<boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>> _ws;
         boost::beast::flat_buffer               _buffer;
-        std::function<void(std::string, void*)> _event_handler;
+        std::function<void(std::string/*, void**/)> _event_handler;
 
         WS(std::string host_,
            const std::string& port_,
            const std::string& target_,
            boost::asio::io_context& ioc_,
-           std::function<void(std::string, void*)> event_handler_,
+           std::function<void(std::string/*, void**/)> event_handler_,
            const std::shared_ptr<spdlog::logger> &logger_);
         void    on_read(boost::beast::error_code ec_, std::size_t bytes_transgerred_);
         size_t  write(const std::string& message_);

@@ -18,20 +18,30 @@ namespace ftx {
 class AsyncRESTClient
 {
   public:
-    AsyncRESTClient(const std::string api_key_, const std::string api_secret_, net::io_context& ioc_, const std::function<void(std::string)>& event_handler_);
+    AsyncRESTClient(const std::string api_key_, const std::string api_secret_, const std::string subaccount_name_, net::io_context& ioc_, const std::function<void(std::string)>& event_handler_);
 
     void get_balances();
 
     // выставляет ордер
     void place_order(const std::string market_,
                      const std::string side_,
-                     const std::string& tyle_,
+                     const std::string& type_,
+                     const double& price_,
+                     const double& size_);
+    void place_order(const std::string& client_id,
+                     const std::string market_,
+                     const std::string side_,
+                     const std::string& type_,
                      const double& price_,
                      const double& size_);
     // отменяет все ордера
     void cancel_all_orders(const std::string market_);
     // отменяет ордер по идентфикатору
     void cancel_order(const std::string& order_id_);
+    // получает статус ордера по идентификатору
+    void get_order_status(const std::string& order_id_);
+    // получает статус ордера по клиентскому идентификатору
+    void get_order_status_by_client_id(const std::string& client_id_);
 
   private:
     std::shared_ptr<AsyncHTTPSession> _async_http_client;

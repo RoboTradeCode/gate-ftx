@@ -110,7 +110,7 @@ private:
     std::string                _prev_metric_message = "none";
 
     // callback функция принимает ордербуки с биржы через public WebSocket
-    void        public_ws_handler(std::string_view message_, void* id_);
+    void        public_ws_handler(std::string_view message_/*, void* id_*/);
     // callback функция принимает команды от ядра
     void        aeron_handler(std::string_view message_);
     // создаёт канал для отправки запроса на получение конфига и канал для приёма конфига от агента
@@ -123,17 +123,26 @@ private:
     bool        create_private_ws(bss::error& error_);
     // создаёт публичный WebSocket
     bool        create_public_ws(bss::error& error_);
-    // запрос на получение полного конфига  ????
+    // запрашивает получение полного конфига  ????
     void        get_full_config_request();
+    // запрашивает статус ордера по order_id
+    void        get_order_status(const std::string& order_id_);
+    // запрашивает статус ордера по client_id
+    void        get_order_status_by_client_id(const std::string& client_id_);
     // принимает конфиг от агента
     void        config_from_agent_handler(std::string_view message_);
-    void        private_ws_handler(std::string_view message_, void* id_);
+    void        private_ws_handler(std::string_view message_/*, void* id_*/);
     // callback функция результата асинхронного выставления и отмены оредров
-    void        place_order_result_handler(std::string_view message_);
+    //void        place_order_result_handler(std::string_view message_);
+    void        place_create_order_handler(std::string_view response_);
+    void        place_cancel_order_handler(std::string_view response_);
+    void        place_cancel_all_orders_handler(std::string_view response_);
+    // callback функция результата запроса статуса ордера
+    void        status_order_handler(std::string_view response_);
     // обрабатывает и логирует ошибку от каналов aeron
     void        processing_error(std::string_view error_source_, const std::string& prev_messsage_, const std::int64_t& error_code_);
     // создает ордер
-    void        create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const double& price_, const double& quantity_);
+    void        create_order(std::string_view side_, const std::string& symbol_, const std::string& type_, const std::string& client_id_,const double& price_, const double& quantity_);
     // отменяет ордер по order_id
     //void        cancel_order(const int64_t& order_id);
     void        cancel_order(const std::string& order_id_);
@@ -155,11 +164,11 @@ private:
     // отправляет баланс
     void        balance_sender(const std::map<std::string, s_balances_state>& balances_map_);
     // отправляет сообщение в лог сервер
-    void        log_sender(const std::string& action_, std::string_view message_);
+    void        log_sender(const std::string& event_, const std::string& action_, std::string_view message_);
     // отправляем ошибки
     //void        error_sender(std::string_view message_);
     // получает более подробную информацию об изменении ордера
-    order_status get_order_change_description(std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_);
+    order_status get_order_change_description(const s_order& response/*std::string_view side_, std::string_view status_, const double& filled_size_, const double& remaining_size_*/);
 
 public:
     // для получения конфига с сервера
